@@ -62,27 +62,70 @@ public class Main {
     }
 
     /**
-     *  Reads new instructions from Instruction List
-     *  
-     * 
-     * 
+     * IF Stage:
+     * Should do the following:
+     * 1. Push new instruction from instruction list to fake-ROB. Initialize the instruction's data structure
+     *    including setting its state to IF.
+     * 2. Add the instruction to the dispatch_list and reserve a dispatch queue entry 
+     *    (increment count of the number of instruction in the dispatch queue)
      */
     private static void fetch() {
         
     }
 
+    /**
+     * ID Stage:
+     * Should do the following:
+     * From dispatch_list, construct a temp listt of instructions in the ID state 
+     * 
+     * Scan the temp list in ascending order of tags and if the scheduling queue is not full, then:
+     * 1. Remove the instruction from the dispatch_list and add it to the issue_list. Reserve a schedule
+     *    queue entry (e.g. increment a count of the number of instructions in the scheduling queue) and
+     *    free a dispatch queue entry (e.g. decrement a count of the number of instructions in the dispatch queue)
+     * 2. Transition from the ID state to the IS state
+     * 3. Rename source operands by lookingg up state in the register file:
+     * 
+     */
     private static void dispatch() {
 
     }
 
+    /**
+     * IS Stage:
+     *  From the issue_list, construct a temp list of instructions whose operands are ready – these are the READY instructions.
+     * Scan the READY instructions in ascending order of tags and issue up to N+1 of them. To issue an instruction:
+     *  1) Remove the instruction from the issue_list and add it to the execute_list.
+     *  2) Transition from the IS state to the EX state.
+     *  3) Free up the scheduling queue entry (e.g., decrement a count of the number of instructions in the scheduling queue)
+     *  4) Set a timer in the instruction’s data structure that will allow you to model the execution latency 
+     */
     private static void issue() {
 
     }
 
+    /**
+     * EX Stage:
+     * Should do the following:
+     *  1. Remove instruction from execute_list
+     *  2. Transition from EX state to WB state
+     *  3. Update register file state and wake up dependendant instructions (set operand ready flags)
+     */
     private static void execute() {
 
     }
 
+    /**
+     * Writeback Stage:
+     * 
+     */
+    private static void writeback() {
+
+    }
+
+    /**
+     * Removes instructions from the head of the fake-ROB
+     * until an instruction is reached that is not in the WB state
+     */
     private static void fakeRetire() {
 
     }
@@ -103,3 +146,4 @@ class Instruction {
         return pc + " " + op + " " + dest + " " + src1 + " " + src2;
     }
 }
+
