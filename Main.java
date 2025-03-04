@@ -21,9 +21,9 @@ public class Main {
 
             List<Instruction> instructions = new ArrayList<>();
             while (fileScanner.hasNextLine()) {
-                var line = fileScanner.nextLine();
+                String line = fileScanner.nextLine();
                 String[] split = line.split(" ");
-                var newInstruction = new Instruction(
+                Instruction newInstruction = new Instruction(
                     Integer.parseInt(split[0], 16), // Converts hexadecimal to int
                     Integer.parseInt(split[1]), 
                     Integer.parseInt(split[2]), 
