@@ -59,6 +59,30 @@ public class Main {
         System.out.println("Finshed Executing");
         
     }
+
+    /*
+        This contains a list of instructions in either the IF or ID
+        state. The dispatch_list models the Dispatch Queue. (By including both
+        the IF and ID states, we don’t need to separately model the pipeline
+        registers of the fetch and dispatch stages.)
+     */
+    List<Instruction> dispatchList = new ArrayList<>();
+
+    /*
+        This contains a list of instructions in the IS state (waiting for
+        operands or available issue bandwidth). The issue_list models the
+        Scheduling Queue.
+    */
+    List<Instruction> issueList = new ArrayList<>();
+
+    /*
+        This contains a list of instructions in the EX state (waiting
+        for the execution latency of the operation). The execute_list models
+        the FUs.
+    */
+    List<Instruction> executeList = new ArrayList<>();
+
+    
         
     private static boolean advanceCycle(List<Instruction> instructions) {
         // Advance simulator cycle?
