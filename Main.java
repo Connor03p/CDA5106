@@ -4,6 +4,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
 
+enum State {
+    IF,
+    ID,
+    EX,
+    MEM,
+    WB;
+}
+
 public class Main {
     public static void main(String args[]) {
         /*
@@ -44,13 +52,15 @@ public class Main {
 
 class Instruction {
     int pc, op, dest, src1, src2;
-    
+    State state;
+
     Instruction(int pc, int op, int dest, int src1, int src2) {
         this.pc = pc;
         this.op = op;
         this.dest = dest;
         this.src1 = src1;
         this.src2 = src2;
+        this.state = null;
     }
 
     public String toString() {
