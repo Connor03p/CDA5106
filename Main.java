@@ -16,10 +16,12 @@ public class Main {
 
         File file = new File(filename);
         Scanner fileScanner;
+        
+        List<Instruction> instructions = new ArrayList<>();
+
         try {
             fileScanner = new Scanner(file);
 
-            List<Instruction> instructions = new ArrayList<>();
             while (fileScanner.hasNextLine()) {
                 String line = fileScanner.nextLine();
                 String[] split = line.split(" ");
@@ -39,6 +41,50 @@ public class Main {
             System.out.println("Error reading file.");
             return;
         }        
+
+        // Main Simulator Loop
+        do  {
+            // Stuff goes here?
+            instructions.remove(0);
+        }
+        while(advanceCycle(instructions));
+        System.out.println("Finshed Executing");
+        
+    }
+        
+    private static boolean advanceCycle(List<Instruction> instructions) {
+        // Advance simulator cycle?
+        // int PC += 1?
+
+        // Check if Instruction List is empty, return false
+        return instructions.isEmpty();
+
+    }
+
+    /**
+     *  Reads new instructions from Instruction List
+     *  
+     * 
+     * 
+     */
+    private static void fetch() {
+        
+    }
+
+    private static void dispatch() {
+
+    }
+
+    private static void issue() {
+
+    }
+
+    private static void execute() {
+
+    }
+
+    private static void fakeRetire() {
+
     }
 }
 
