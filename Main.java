@@ -24,12 +24,10 @@ public class Main {
 
         File file = new File(filename);
         Scanner fileScanner;
+        int tagNum = 0;
         
-        List<Instruction> instructions = new ArrayList<>();
-
         try {
             fileScanner = new Scanner(file);
-            int tagNum = 0;
 
             while (fileScanner.hasNextLine()) {
                 String line = fileScanner.nextLine();
@@ -55,13 +53,28 @@ public class Main {
 
         // Main Simulator Loop
         do  {
-            // Stuff goes here?
+            
+            // @FIX: This currently just pops from the first index, only done to keep track of how many instructions 
+            //        are being passed and to break out of an infinite loop, this is not the correct implementation 
+            //        so this needs to be fixed.
+            
+            fetch(instructions.get(0));
             instructions.remove(0);
         }
         while(advanceCycle(instructions));
+
+        /** 
+         * @TODO: Have a proper variable keep track of the number of cycles, and IPC 
+         */
+
         System.out.println("Finshed Executing");
+        System.out.println("number of instructions = "  + (tagNum));
+        System.out.println("number of cycles       = Not Set");
+        System.out.println("IPC                    = Not Set");
         
     }
+
+    static List<Instruction> instructions = new ArrayList<>();
 
     /*
         This contains a list of instructions in either the IF or ID
@@ -69,30 +82,33 @@ public class Main {
         the IF and ID states, we don’t need to separately model the pipeline
         registers of the fetch and dispatch stages.)
      */
-    List<Instruction> dispatchList = new ArrayList<>();
+    static List<Instruction> dispatchList = new ArrayList<>();
 
     /*
         This contains a list of instructions in the IS state (waiting for
         operands or available issue bandwidth). The issue_list models the
         Scheduling Queue.
     */
-    List<Instruction> issueList = new ArrayList<>();
+    static List<Instruction> issueList = new ArrayList<>();
 
     /*
         This contains a list of instructions in the EX state (waiting
         for the execution latency of the operation). The execute_list models
         the FUs.
     */
-    List<Instruction> executeList = new ArrayList<>();
+    static List<Instruction> executeList = new ArrayList<>();
 
-    
+    /**
+     * @param List<Instruction> instructions
+     * @return boolean - If the list is empty, return false and stop execution
+     */
         
     private static boolean advanceCycle(List<Instruction> instructions) {
         // Advance simulator cycle?
         // int PC += 1?
 
         // Check if Instruction List is empty, return false
-        return instructions.isEmpty();
+        return !instructions.isEmpty();
 
     }
 
@@ -103,9 +119,17 @@ public class Main {
      *    including setting its state to IF.
      * 2. Add the instruction to the dispatch_list and reserve a dispatch queue entry 
      *    (increment count of the number of instruction in the dispatch queue)
+     * 
+     * @param Instruction instruction - an instruction to be configured, and added to dispatch_list
+     * 
      */
-    private static void fetch() {
-        
+    private static void fetch(Instruction instruction) {
+        // Here, we are setting the instruction to IF, not sure what the initializing the data structure is (besides creating it?);
+        instruction.setState(State.IF);
+
+        // Push to dispatch_list, dispatchList.size() should give us the count of this arraylist.
+        dispatchList.add(instruction);
+        System.out.println("Successfully fetched and added to dispatch: " + instruction);
     }
 
     /**
@@ -183,5 +207,8 @@ class Instruction {
     public String toString() {
         return tag + " " + pc + " " + op + " " + dest + " " + src1 + " " + src2;
     }
-}
 
+    public void setState(State state) {
+        this.state = state;
+    }
+}
