@@ -29,6 +29,7 @@ public class Main {
 
         try {
             fileScanner = new Scanner(file);
+            int tagNum = 0;
 
             while (fileScanner.hasNextLine()) {
                 String line = fileScanner.nextLine();
@@ -38,8 +39,10 @@ public class Main {
                     Integer.parseInt(split[1]), 
                     Integer.parseInt(split[2]), 
                     Integer.parseInt(split[3]), 
-                    Integer.parseInt(split[4])
+                    Integer.parseInt(split[4]),
+                    tagNum
                 );
+                tagNum++;
                 System.out.println(newInstruction.toString());
                 instructions.add(newInstruction);
             }
@@ -164,20 +167,21 @@ public class Main {
 }
 
 class Instruction {
-    int pc, op, dest, src1, src2;
+    int pc, op, dest, src1, src2, tag;
     State state;
 
-    Instruction(int pc, int op, int dest, int src1, int src2) {
+    Instruction(int pc, int op, int dest, int src1, int src2, int tag) {
         this.pc = pc;
         this.op = op;
         this.dest = dest;
         this.src1 = src1;
         this.src2 = src2;
         this.state = null;
+        this.tag = tag;
     }
 
     public String toString() {
-        return pc + " " + op + " " + dest + " " + src1 + " " + src2;
+        return tag + " " + pc + " " + op + " " + dest + " " + src1 + " " + src2;
     }
 }
 
