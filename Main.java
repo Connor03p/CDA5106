@@ -7,6 +7,7 @@ import java.util.Scanner;
 enum State {
     IF,
     ID,
+    IS,
     EX,
     MEM,
     WB;
@@ -57,9 +58,14 @@ public class Main {
             // @FIX: This currently just pops from the first index, only done to keep track of how many instructions 
             //        are being passed and to break out of an infinite loop, this is not the correct implementation 
             //        so this needs to be fixed.
-            
+
             fetch(instructions.get(0));
             instructions.remove(0);
+            dispatch();
+            issue();
+            execute();
+            writeback();
+            fakeRetire();
         }
         while(advanceCycle(instructions));
 
@@ -135,7 +141,7 @@ public class Main {
     /**
      * ID Stage:
      * Should do the following:
-     * From dispatch_list, construct a temp listt of instructions in the ID state 
+     * From dispatch_list, construct a temp list of instructions in the ID state 
      * 
      * Scan the temp list in ascending order of tags and if the scheduling queue is not full, then:
      * 1. Remove the instruction from the dispatch_list and add it to the issue_list. Reserve a schedule
@@ -146,6 +152,20 @@ public class Main {
      * 
      */
     private static void dispatch() {
+        for (Instruction i : dispatchList) {
+            // Only add instructions with 'ID' tag to new list
+            // @NOTE - I'm assuming the 1 cycle stall is it starts at IF, otherwise start at 'ID'
+            if (i.state == State.ID) {
+                i.state = State.IS;
+                issueList.add(i); // Auto increments because arraylist
+                dispatchList.remove(i); // Same here, auto decrements because arraylist
+            }
+            else {
+                i.state = State.ID;
+            }
+        }
+
+        // System.out.println(tempList);
 
     }
 
