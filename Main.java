@@ -104,6 +104,15 @@ public class Main {
     */
     static List<Instruction> executeList = new ArrayList<>();
 
+    /*
+     *  This is the array that will simulate the 'register', its 127 in size since the
+     *  current instruction set specifies instructions will only registers 0 - 127
+     *  -1 is no reg, so do nothing with that
+     * 
+     *  set to null if unoccupied
+     */
+    static Instruction[] register = new Instruction[127];
+
     /**
      * @param List<Instruction> instructions
      * @return boolean - If the list is empty, return false and stop execution
@@ -156,17 +165,49 @@ public class Main {
             // Only add instructions with 'ID' tag to new list
             // @NOTE - I'm assuming the 1 cycle stall is it starts at IF, otherwise start at 'ID'
             if (i.state == State.ID) {
-                i.state = State.IS;
-                issueList.add(i); // Auto increments because arraylist
-                dispatchList.remove(i); // Same here, auto decrements because arraylist
+                // i.state = State.IS;
+                // issueList.add(i); // Auto increments because arraylist
+                // dispatchList.remove(i); // Same here, auto decrements because arraylist
+                boolean isAssigned = false;
+                System.out.println("Attempting to assign Instruction to REG[" + i.src1 +"] and REG[" + i.src2 + "]");
+
+                // Assign instruction to a specific register, they need both registers, otherwise stall
+                // @NOTE - I'm assuming that, dest is occupied later in writeback so we only carry
+                //         if the source regsiters are currently being used.
+                
+                // Instruction doesn't need a register? Simply proceed
+                if (i.src1 == -1 && i.src2 == -1) {
+                    isAssigned = true;
+                }
+                // Instruction is using 1 register, indicated by -1
+                else if (i.src2 == -1 && register[i.src1] != null) {
+                    register[i.src1] = i;
+                    isAssigned = true;
+                }
+                else if (i.src1 == -1 && register[i.src2] != null) {
+                    register[i.src2] = i;
+                    isAssigned = true;
+                }
+                // Instruction is using two registers
+                else if (register[i.src1] != null && register[i.src2] != null) {
+                    register[i.src1] = i;
+                    register[i.src2] = i;
+                    isAssigned = true;
+                }
+
+                // If an instruction has an avaliable register, then it can proceed to the issues, otherwise
+                // stall until that register is avaliable???
+                // @NOTE, i'm not sure if this is the correct implementation, subject to change.
+                if (isAssigned) {
+                    i.state = State.IS;
+                    issueList.add(i); // Auto increments because arraylist
+                    dispatchList.remove(i); // Same here, auto decrements because arraylist
+                }
             }
             else {
                 i.state = State.ID;
             }
         }
-
-        // System.out.println(tempList);
-
     }
 
     /**
@@ -214,6 +255,8 @@ class Instruction {
     int pc, op, dest, src1, src2, tag;
     State state;
 
+    int latency, cycles;
+
     Instruction(int pc, int op, int dest, int src1, int src2, int tag) {
         this.pc = pc;
         this.op = op;
@@ -222,6 +265,8 @@ class Instruction {
         this.src2 = src2;
         this.state = null;
         this.tag = tag;
+        setLatency();
+        this.cycles = 0;
     }
 
     public String toString() {
@@ -230,5 +275,25 @@ class Instruction {
 
     public void setState(State state) {
         this.state = state;
+    }
+
+    /**
+     * Set how many cycles this instruction needs in order to finish processing based on
+     * op code: 0 => 1 cycle, 1 => 2 cycles, 2 => 5 cycles.
+     */
+    private void setLatency() {
+        switch (this.op) {
+            case 0:
+                this.latency = 1;
+                break;
+            case 1:
+                this.latency = 2;
+                break;
+            case 2:
+                this.latency = 5;
+                break;
+            default:
+                break;
+        }
     }
 }
