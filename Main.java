@@ -1,6 +1,7 @@
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Scanner;
 
@@ -82,22 +83,22 @@ public class Main {
 
     static List<Instruction> instructions = new ArrayList<>();
 
-    /*
+    /**
         This contains a list of instructions in either the IF or ID
         state. The dispatch_list models the Dispatch Queue. (By including both
         the IF and ID states, we don’t need to separately model the pipeline
         registers of the fetch and dispatch stages.)
-     */
+    */
     static List<Instruction> dispatchList = new ArrayList<>();
 
-    /*
+    /**
         This contains a list of instructions in the IS state (waiting for
         operands or available issue bandwidth). The issue_list models the
         Scheduling Queue.
     */
     static List<Instruction> issueList = new ArrayList<>();
 
-    /*
+    /**
         This contains a list of instructions in the EX state (waiting
         for the execution latency of the operation). The execute_list models
         the FUs.
@@ -220,7 +221,25 @@ public class Main {
      *  4) Set a timer in the instruction’s data structure that will allow you to model the execution latency 
      */
     private static void issue() {
+        System.out.println("Issue");
 
+        // Uses iterator to prevent concurrent modification exception
+        Iterator<Instruction> itr = issueList.iterator();
+        while (itr.hasNext()) {
+            Instruction i = itr.next();
+
+            itr.remove();
+
+            // Transition from the IS state to the EX state
+            if (i.state == State.IS) {
+                i.state = State.EX;
+                System.out.println("  Instruction " + i.tag + " issued for execution.");
+            }
+                
+              
+            // Move instruction to execute list
+            executeList.add(i);
+        }
     }
 
     /**
@@ -231,7 +250,26 @@ public class Main {
      *  3. Update register file state and wake up dependendant instructions (set operand ready flags)
      */
     private static void execute() {
-
+        System.out.println("Execute");
+        Iterator<Instruction> itr = executeList.iterator();
+        while (itr.hasNext()) {
+            Instruction i = itr.next();
+            
+            // Increment timer to simulate execution latency
+            if (i.exeTimer < i.cycles){
+                i.exeTimer++; 
+                System.out.println("  Instruction " + i.tag + " timer: " + i.exeTimer + "/" + i.cycles);
+            }
+               
+            
+            // When the timer finishes, move to WB state
+            else if (i.state == State.EX) {
+                i.state = State.WB;
+                System.out.println("  Instruction " + i.tag + " done executing.");
+            }
+                
+                
+        }
     }
 
     /**
@@ -256,6 +294,7 @@ class Instruction {
     State state;
 
     int latency, cycles;
+    int exeTimer = 0;
 
     Instruction(int pc, int op, int dest, int src1, int src2, int tag) {
         this.pc = pc;
