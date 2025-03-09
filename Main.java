@@ -187,16 +187,16 @@ public class Main {
                     isAssigned = true;
                 }
                 // Instruction is using 1 register, indicated by -1
-                else if (i.src2 == -1 && register[i.src1] != null) {
+                else if (i.src2 == -1 && register[i.src1] == null) {
                     register[i.src1] = i;
                     isAssigned = true;
                 }
-                else if (i.src1 == -1 && register[i.src2] != null) {
+                else if (i.src1 == -1 && register[i.src2] == null) {
                     register[i.src2] = i;
                     isAssigned = true;
                 }
                 // Instruction is using two registers
-                else if (register[i.src1] != null && register[i.src2] != null) {
+                else if (register[i.src1] == null && register[i.src2] == null) {
                     register[i.src1] = i;
                     register[i.src2] = i;
                     isAssigned = true;
@@ -208,7 +208,7 @@ public class Main {
                 if (isAssigned) {
                     i.state = State.IS;
                     issueList.add(i); // Auto increments because arraylist
-                    dispatchList.remove(i); // Same here, auto decrements because arraylist
+                    iterator.remove(); // Same here, auto decrements because arraylist
                     System.out.println("  Moved instruction to issueList: " + i);
                 }
             }
@@ -236,12 +236,26 @@ public class Main {
         while (iterator.hasNext()) {
             Instruction i = iterator.next();
 
-            iterator.remove();
-
             // Transition from the IS state to the EX state
             if (i.state == State.IS) {
-                i.state = State.EX;
+
+                // Free src1
+                if (i.src1 != -1)
+                    register[i.src1] = null;
+
+                // Free src2
+                if (i.src2 != -1)
+                    register[i.src2] = null;
+
+                // Free dest
+                if (i.dest != -1)
+                    register[i.dest] = null;
+
+                // Remove instruction from execution
                 System.out.println("  Instruction " + i.tag + " issued for execution.");
+                i.state = State.EX;
+                iterator.remove();
+
             }
                 
               
@@ -275,6 +289,7 @@ public class Main {
             else if (i.state == State.EX) {
                 i.state = State.WB;
                 System.out.println("  Instruction " + i.tag + " done executing.");
+
             }
                 
                 
