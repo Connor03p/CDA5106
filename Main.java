@@ -162,7 +162,13 @@ public class Main {
     private static void dispatch() {
         System.out.println("Dispatch");
         System.out.println("  " + dispatchList.size() + " instructions in list");
-        for (Instruction i : dispatchList) {
+
+        Iterator<Instruction> iterator = dispatchList.iterator();
+
+
+        while (iterator.hasNext()) {
+            Instruction i = iterator.next();
+
             // Only add instructions with 'ID' tag to new list
             // @NOTE - I'm assuming the 1 cycle stall is it starts at IF, otherwise start at 'ID'
             if (i.state == State.ID) {
@@ -249,7 +255,7 @@ public class Main {
      * Should do the following:
      *  1. Remove instruction from execute_list
      *  2. Transition from EX state to WB state
-     *  3. Update register file state and wake up dependendant instructions (set operand ready flags)
+     *  3. Update register file state and wake up dependant instructions (set operand ready flags)
      */
     private static void execute() {
         System.out.println("Execute");
@@ -296,7 +302,7 @@ class Instruction {
     int pc, op, dest, src1, src2, tag;
     State state;
 
-    int latency, cycles;
+    int latency;
     int exeTimer = 0;
 
     Instruction(int pc, int op, int dest, int src1, int src2, int tag) {
@@ -308,7 +314,6 @@ class Instruction {
         this.state = null;
         this.tag = tag;
         setLatency();
-        this.cycles = 0;
     }
 
     public String toString() {
