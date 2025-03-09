@@ -55,6 +55,7 @@ public class Main {
 
         // Main Simulator Loop
         Iterator<Instruction> iterator = instructions.iterator();
+        int numCycles = 0;
         do  {
             fakeRetire();
             execute();
@@ -62,6 +63,7 @@ public class Main {
             dispatch();
             if (iterator.hasNext())
                 fetch(iterator.next());
+            numCycles++;
         }
         while(iterator.hasNext()); // Change to advanceCycle() when fakeRetire() is implemented
 
@@ -71,8 +73,8 @@ public class Main {
 
         System.out.println("Finshed Executing");
         System.out.println("number of instructions = "  + (tagNum));
-        System.out.println("number of cycles       = Not Set");
-        System.out.println("IPC                    = Not Set");
+        System.out.println("number of cycles       = " + (numCycles));
+        System.out.println("IPC                    = " + (numCycles/tagNum));
         
     }
 
