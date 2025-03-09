@@ -249,15 +249,15 @@ public class Main {
 
                 // Free src1
                 if (i.src1 != -1)
-                    register[i.src1] = null;
+                    register[i.src1] = Reg.free;
 
                 // Free src2
                 if (i.src2 != -1)
-                    register[i.src2] = null;
+                    register[i.src2] = Reg.free;
 
                 // Free dest
                 if (i.dest != -1)
-                    register[i.dest] = null;
+                    register[i.dest] = Reg.free;
 
                 // Remove instruction from execution
                 System.out.println("  Instruction " + i.tag + " issued for execution.");
