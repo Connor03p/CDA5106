@@ -14,6 +14,12 @@ enum State {
     WB;
 }
 
+enum Reg {
+    free,
+    read,
+    write
+}
+
 public class Main {
     public static void main(String args[]) {
         /*
@@ -109,7 +115,7 @@ public class Main {
      * 
      *  set to null if unoccupied
      */
-    static Instruction[] register = new Instruction[127];
+    static Reg[] register = new Reg[127];
 
     /**
      * @param List<Instruction> instructions
@@ -179,37 +185,39 @@ public class Main {
                 //System.out.println("Attempting to assign Instruction to REG[" + i.src1 +"] and REG[" + i.src2 + "]");
 
                 // Assign instruction to a specific register, they need both registers, otherwise stall
-                // @NOTE - I'm assuming that, dest is occupied later in writeback so we only carry
-                //         if the source regsiters are currently being used.
-                
+                // This should simiulate prevention of Read-After-Write Errors
+                // @NOTE - An instruction can only proceed if the source registers are 
+         
                 // Instruction doesn't need a register? Simply proceed
                 if (i.src1 == -1 && i.src2 == -1) {
                     isAssigned = true;
                 }
                 // Instruction is using 1 register, indicated by -1
-                else if (i.src2 == -1 && register[i.src1] != null) {
-                    register[i.src1] = i;
+                else if (i.src2 == -1 && register[i.src1] != Reg.write) {
+                    register[i.src1] = Reg.read;
                     isAssigned = true;
                 }
-                else if (i.src1 == -1 && register[i.src2] != null) {
-                    register[i.src2] = i;
+                else if (i.src1 == -1 && register[i.src2] != Reg.write) {
+                    register[i.src2] = Reg.read;
                     isAssigned = true;
                 }
                 // Instruction is using two registers
-                else if (register[i.src1] != null && register[i.src2] != null) {
-                    register[i.src1] = i;
-                    register[i.src2] = i;
+                else if (register[i.src1] != Reg.write && register[i.src2] != Reg.write) {
+                    register[i.src1] = Reg.read;
+                    register[i.src2] = Reg.read;
                     isAssigned = true;
                 }
 
-                // If an instruction has an avaliable register, then it can proceed to the issues, otherwise
-                // stall until that register is avaliable???
-                // @NOTE, i'm not sure if this is the correct implementation, subject to change.
-                if (isAssigned) {
+                // If an instruction's source registers are not being written, and if the destination register is
+                // not being written, then assign register modify reg[dest]
+                // This should prevent Write-After-Write errors
+                if (isAssigned && register[i.dest] != Reg.write) {
+                    register[i.dest] = Reg.write;
                     i.state = State.IS;
                     issueList.add(i); // Auto increments because arraylist
                     dispatchList.remove(i); // Same here, auto decrements because arraylist
                     System.out.println("  Moved instruction to issueList: " + i);
+
                 }
             }
             else {
