@@ -54,21 +54,16 @@ public class Main {
         }        
 
         // Main Simulator Loop
+        Iterator<Instruction> iterator = instructions.iterator();
         do  {
-            
-            // @FIX: This currently just pops from the first index, only done to keep track of how many instructions 
-            //        are being passed and to break out of an infinite loop, this is not the correct implementation 
-            //        so this needs to be fixed.
-
-            fetch(instructions.get(0));
-            instructions.remove(0);
-            dispatch();
-            issue();
-            execute();
-            writeback();
             fakeRetire();
+            execute();
+            issue();
+            dispatch();
+            if (iterator.hasNext())
+                fetch(iterator.next());
         }
-        while(advanceCycle(instructions));
+        while(iterator.hasNext()); // Change to advanceCycle() when fakeRetire() is implemented
 
         /** 
          * @TODO: Have a proper variable keep track of the number of cycles, and IPC 
@@ -140,12 +135,13 @@ public class Main {
      * 
      */
     private static void fetch(Instruction instruction) {
+        System.out.println("Fetch");
         // Here, we are setting the instruction to IF, not sure what the initializing the data structure is (besides creating it?);
         instruction.setState(State.IF);
 
         // Push to dispatch_list, dispatchList.size() should give us the count of this arraylist.
         dispatchList.add(instruction);
-        System.out.println("Successfully fetched and added to dispatch: " + instruction);
+        System.out.println("  Fetched instruction: " + instruction);
     }
 
     /**
@@ -162,6 +158,8 @@ public class Main {
      * 
      */
     private static void dispatch() {
+        System.out.println("Dispatch");
+        System.out.println("  " + dispatchList.size() + " instructions in list");
         for (Instruction i : dispatchList) {
             // Only add instructions with 'ID' tag to new list
             // @NOTE - I'm assuming the 1 cycle stall is it starts at IF, otherwise start at 'ID'
@@ -170,7 +168,7 @@ public class Main {
                 // issueList.add(i); // Auto increments because arraylist
                 // dispatchList.remove(i); // Same here, auto decrements because arraylist
                 boolean isAssigned = false;
-                System.out.println("Attempting to assign Instruction to REG[" + i.src1 +"] and REG[" + i.src2 + "]");
+                //System.out.println("Attempting to assign Instruction to REG[" + i.src1 +"] and REG[" + i.src2 + "]");
 
                 // Assign instruction to a specific register, they need both registers, otherwise stall
                 // @NOTE - I'm assuming that, dest is occupied later in writeback so we only carry
@@ -203,6 +201,7 @@ public class Main {
                     i.state = State.IS;
                     issueList.add(i); // Auto increments because arraylist
                     dispatchList.remove(i); // Same here, auto decrements because arraylist
+                    System.out.println("  Moved instruction to issueList: " + i);
                 }
             }
             else {
@@ -222,13 +221,14 @@ public class Main {
      */
     private static void issue() {
         System.out.println("Issue");
+        System.out.println("  " + issueList.size() + " instructions in list");
 
         // Uses iterator to prevent concurrent modification exception
-        Iterator<Instruction> itr = issueList.iterator();
-        while (itr.hasNext()) {
-            Instruction i = itr.next();
+        Iterator<Instruction> iterator = issueList.iterator();
+        while (iterator.hasNext()) {
+            Instruction i = iterator.next();
 
-            itr.remove();
+            iterator.remove();
 
             // Transition from the IS state to the EX state
             if (i.state == State.IS) {
@@ -251,14 +251,15 @@ public class Main {
      */
     private static void execute() {
         System.out.println("Execute");
-        Iterator<Instruction> itr = executeList.iterator();
-        while (itr.hasNext()) {
-            Instruction i = itr.next();
+        System.out.println("  " + executeList.size() + " instructions in list");
+        Iterator<Instruction> iterator = executeList.iterator();
+        while (iterator.hasNext()) {
+            Instruction i = iterator.next();
             
             // Increment timer to simulate execution latency
-            if (i.exeTimer < i.cycles){
+            if (i.exeTimer < i.latency){
                 i.exeTimer++; 
-                System.out.println("  Instruction " + i.tag + " timer: " + i.exeTimer + "/" + i.cycles);
+                System.out.println("  Instruction " + i.tag + " timer: " + i.exeTimer + "/" + i.latency);
             }
                
             
@@ -285,7 +286,7 @@ public class Main {
      * until an instruction is reached that is not in the WB state
      */
     private static void fakeRetire() {
-
+        System.out.println("FakeRetire");
     }
 }
 
