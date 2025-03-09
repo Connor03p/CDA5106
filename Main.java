@@ -211,13 +211,28 @@ public class Main {
                 // If an instruction's source registers are not being written, and if the destination register is
                 // not being written, then assign register modify reg[dest]
                 // This should prevent Write-After-Write errors
-                if (isAssigned && register[i.dest] != Reg.write) {
-                    register[i.dest] = Reg.write;
-                    i.state = State.IS;
-                    issueList.add(i); // Auto increments because arraylist
-                    iterator.remove(); // Same here, auto decrements because arraylist
-                    System.out.println("  Moved instruction to issueList: " + i);
-
+                if (isAssigned) {
+                    
+                    // Instruction does not have destination register (is a conditional instruction)
+                    if (i.dest == -1) {   
+                        i.state = State.IS;
+                        issueList.add(i); // Auto increments because arraylist
+                        iterator.remove(); // Same here, auto decrements because arraylist
+                        System.out.println("  Moved instruction to issueList: " + i);
+                    }
+                    
+                    // Instruction has a destination register and can write to it
+                    else if (register[i.dest] != Reg.write) {
+                        register[i.dest] = Reg.write;
+                        i.state = State.IS;
+                        issueList.add(i); // Auto increments because arraylist
+                        iterator.remove(); // Same here, auto decrements because arraylist
+                        System.out.println("  Moved instruction to issueList: " + i);
+                    }
+                    // Instruction has a destination, but destination is currently being written to, stall.
+                    else {
+                        System.out.println("Target Register " + i.dest + " is being overwritten by another instruction");
+                    }
                 }
             }
             else {
