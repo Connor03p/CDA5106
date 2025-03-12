@@ -16,8 +16,7 @@ enum State {
 
 enum Reg {
     free,
-    read,
-    write
+    write,
 }
 
 public class Main {
@@ -181,58 +180,30 @@ public class Main {
                 // i.state = State.IS;
                 // issueList.add(i); // Auto increments because arraylist
                 // dispatchList.remove(i); // Same here, auto decrements because arraylist
-                boolean isAssigned = false;
-                //System.out.println("Attempting to assign Instruction to REG[" + i.src1 +"] and REG[" + i.src2 + "]");
-
-                // Assign instruction to a specific register, they need both registers, otherwise stall
-                // This should simiulate prevention of Read-After-Write Errors
-                // @NOTE - An instruction can only proceed if the source registers are 
-         
-                // Instruction doesn't need a register? Simply proceed
-                if (i.src1 == -1 && i.src2 == -1) {
-                    isAssigned = true;
-                }
-                // Instruction is using 1 register, indicated by -1
-                else if (i.src2 == -1 && register[i.src1] != Reg.write) {
-                    register[i.src1] = Reg.read;
-                    isAssigned = true;
-                }
-                else if (i.src1 == -1 && register[i.src2] != Reg.write) {
-                    register[i.src2] = Reg.read;
-                    isAssigned = true;
-                }
-                // Instruction is using two registers
-                else if (register[i.src1] != Reg.write && register[i.src2] != Reg.write) {
-                    register[i.src1] = Reg.read;
-                    register[i.src2] = Reg.read;
-                    isAssigned = true;
-                }
 
                 // If an instruction's source registers are not being written, and if the destination register is
                 // not being written, then assign register modify reg[dest]
-                // This should prevent Write-After-Write errors
-                if (isAssigned) {
+                // This should prevent Write-After-Write errors 
+                // Instruction does not have destination register (is a conditional instruction)
+                if (i.dest == -1) {   
+                    i.state = State.IS;
+                    issueList.add(i); // Auto increments because arraylist
+                    iterator.remove(); // Same here, auto decrements because arraylist
+                    System.out.println("  Moved instruction to issueList: " + i);
+                }
                     
-                    // Instruction does not have destination register (is a conditional instruction)
-                    if (i.dest == -1) {   
-                        i.state = State.IS;
-                        issueList.add(i); // Auto increments because arraylist
-                        iterator.remove(); // Same here, auto decrements because arraylist
-                        System.out.println("  Moved instruction to issueList: " + i);
-                    }
-                    
-                    // Instruction has a destination register and can write to it
-                    else if (register[i.dest] != Reg.write) {
-                        register[i.dest] = Reg.write;
-                        i.state = State.IS;
-                        issueList.add(i); // Auto increments because arraylist
-                        iterator.remove(); // Same here, auto decrements because arraylist
-                        System.out.println("  Moved instruction to issueList: " + i);
-                    }
+                // Instruction has a destination register and can write to it
+                else if (register[i.dest] != Reg.write) {
+                    register[i.dest] = Reg.write;
+                    i.state = State.IS;
+                    issueList.add(i); // Auto increments because arraylist
+                    iterator.remove(); // Move to next item
+                    System.out.println("  Moved instruction to issueList: " + i);
+                }
                     // Instruction has a destination, but destination is currently being written to, stall.
-                    else {
-                        System.out.println("Target Register " + i.dest + " is being overwritten by another instruction");
-                    }
+                else {
+                    System.out.println("Instruction Stall. Register " + i.dest + " is currently being written to.");
+                    iterator.remove(); // Move to next item
                 }
             }
             else {
@@ -261,29 +232,39 @@ public class Main {
 
             // Transition from the IS state to the EX state
             if (i.state == State.IS) {
-
-                // Free src1
-                if (i.src1 != -1)
-                    register[i.src1] = Reg.free;
-
-                // Free src2
-                if (i.src2 != -1)
-                    register[i.src2] = Reg.free;
-
-                // Free dest
-                if (i.dest != -1)
-                    register[i.dest] = Reg.free;
-
-                // Remove instruction from execution
-                System.out.println("  Instruction " + i.tag + " issued for execution.");
-                i.state = State.EX;
-                iterator.remove();
-
-            }
                 
-              
-            // Move instruction to execute list
-            executeList.add(i);
+                // Assign instruction to a specific register, they need both registers, otherwise stall
+                // This should simiulate prevention of Read-After-Write Errors
+                // @NOTE - An instruction can only proceed if the source registers are 
+                
+                boolean isAssigned = false;
+                
+                // Instruction doesn't need a register? Simply proceed
+                if (i.src1 == -1 && i.src2 == -1) {
+                    isAssigned = true;
+                }
+                // Instruction is using 1 register, indicated by -1
+                else if (i.src2 == -1 && register[i.src1] != Reg.write) {
+                    isAssigned = true;
+                }
+                else if (i.src1 == -1 && register[i.src2] != Reg.write) {
+                    isAssigned = true;
+                }
+                // Instruction is using two registers
+                else if (register[i.src1] != Reg.write && register[i.src2] != Reg.write) {
+                    isAssigned = true;
+                }
+            
+
+                if (isAssigned) {
+                    // Remove instruction from execution
+                    System.out.println("  Instruction " + i.tag + " issued for execution.");
+                    i.state = State.EX;
+                    iterator.remove();
+                    executeList.add(i);
+
+                }
+            }
         }
     }
 
@@ -305,14 +286,19 @@ public class Main {
             if (i.exeTimer < i.latency){
                 i.exeTimer++; 
                 System.out.println("  Instruction " + i.tag + " timer: " + i.exeTimer + "/" + i.latency);
+                iterator.remove();
             }
                
             
             // When the timer finishes, move to WB state
             else if (i.state == State.EX) {
                 i.state = State.WB;
-                System.out.println("  Instruction " + i.tag + " done executing.");
-
+                System.out.println("  Instruction " + i + " done executing.");
+                
+                if (i.dest != -1)
+                    register[i.dest] = Reg.free;
+                
+                iterator.remove();
             }
                 
                 
@@ -354,6 +340,7 @@ class Instruction {
         setLatency();
     }
 
+    @Override
     public String toString() {
         return tag + " " + pc + " " + op + " " + dest + " " + src1 + " " + src2;
     }
