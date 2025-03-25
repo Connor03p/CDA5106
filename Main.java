@@ -1,5 +1,10 @@
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -8,6 +13,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
 import java.util.Scanner;
+
 enum State {
     IF,
     ID,
@@ -21,7 +27,14 @@ enum Reg {
     write,
 }
 
+
 public class Main {
+
+    // Variables chosen by user
+    static int schedulingQueueSize = 1;
+    static int fetchRate = 1;
+    static String filename = "./traces/val_trace_gcc.txt";
+
     public static void main(String args[]) {
         /*
             Scanner inputScanner = new Scanner(System.in);
@@ -29,7 +42,6 @@ public class Main {
             String filename = inputScanner.nextLine();
             inputScanner.close();
         */
-        String filename = "./traces/val_trace_gcc.txt";
 
         File file = new File(filename);
         Scanner fileScanner;
@@ -69,9 +81,12 @@ public class Main {
             execute();
             issue();
             dispatch();
-            if (iterator.hasNext()) {
-                fetch(iterator.next());
-                instructionsProcessed++;
+            
+            for (int i = 0; i < fetchRate; i++) {
+                if (iterator.hasNext()) {
+                    fetch(iterator.next());
+                    instructionsProcessed++;
+                }
             }
         }
         while(advanceCycle(instructionsProcessed)); // Change to advanceCycle() when fakeRetire() is implemented
@@ -79,12 +94,38 @@ public class Main {
         /** 
          * @TODO: Have a proper variable keep track of the number of cycles, and IPC 
          */
+        System.out.println("Writing output to file...");
+        writeOutput(tagNum);
+        System.out.println("Done!");
+    }
 
-        System.out.println("Finshed Executing");
-        System.out.println("number of instructions = "  + (tagNum));
-        System.out.println("number of cycles       = " + (PC));
-        System.out.println("IPC                    = " + (PC/tagNum));
-        
+    private static void writeOutput(int tagNum) {
+        // Data to be written in file
+        String text = "";
+
+        // Defining the file name of the file
+        String name = filename.substring(filename.lastIndexOf('_') + 1);
+        name = name.substring(0, name.lastIndexOf('.'));
+
+        Path fileName = Path.of("./pipe_" + schedulingQueueSize + "_" + fetchRate + "_" + name + ".txt");
+
+        Iterator<Instruction> iterator = instructions.iterator();
+        while (iterator.hasNext())
+        {
+            Instruction i = iterator.next();
+            text += i + "\n";
+        }
+
+        text += "number of instructions = " + (tagNum) + "\n";
+        text += "number of cycles       = " + (PC) + "\n";
+        text += "IPC                    = " + (PC/tagNum);
+
+        try {
+            Files.writeString(fileName, text);
+        } 
+          catch (IOException e) {
+            System.err.println("An error occurred: " + e.getMessage());
+        }
     }
 
     static int PC = 0;
@@ -159,6 +200,7 @@ public class Main {
         System.out.println("Fetch");
         // Here, we are setting the instruction to IF, not sure what the initializing the data structure is (besides creating it?);
         instruction.setState(State.IF);
+        instruction.c_IF = PC;
         
         // Push instruction to fake ROB
         fakeROB.add(instruction);
@@ -222,6 +264,10 @@ public class Main {
                 if (isAssigned) {
                     System.out.println("  Instruction " + i.tag + " moved to issueList.");
                     i.setState(State.IS);
+
+                    i.d_ID = PC - i.c_ID;
+                    i.c_IS = PC;
+
                     iterator.remove();
                     issueList.add(i);
                 }
@@ -231,6 +277,8 @@ public class Main {
             }
             else {
                 i.setState(State.ID);
+                i.d_IF = PC - i.c_IF;
+                i.c_ID = PC;
             }
         }
     }
@@ -258,6 +306,8 @@ public class Main {
             Instruction i = iterator.next();
             
             i.setState(State.EX);
+            i.d_IS = PC - i.c_IS;
+            i.c_EX = PC;
             
             // This register is now being written to.
             if (i.dest != -1) {
@@ -292,6 +342,10 @@ public class Main {
             // When the timer finishes, move to WB state
             else {
                 i.setState(State.WB);
+
+                i.d_EX = PC - i.c_EX;
+                i.c_WB = PC;
+
                 System.out.println("  Instruction " + i + " done executing.");
                 
                 if (i.dest != -1)
@@ -311,7 +365,8 @@ public class Main {
 
         while (true) { 
             if (!fakeROB.isEmpty() && fakeROB.peek().state == State.WB) {
-                fakeROB.remove();
+                Instruction i = fakeROB.remove();
+                i.d_WB = PC - i.c_WB;
             }
             else {
                 break;
@@ -322,6 +377,14 @@ public class Main {
 
 class Instruction implements Comparable<Instruction> {
     int pc, op, dest, src1, src2, tag;
+
+    // Store cycle and duration instruction was in each state for final output
+    int c_IF = -1, d_IF = -1;
+    int c_ID = -1, d_ID = -1;
+    int c_IS = -1, d_IS = -1;
+    int c_EX = -1, d_EX = -1;
+    int c_WB = -1, d_WB = -1;
+
     State state;
 
     int latency;
@@ -338,9 +401,18 @@ class Instruction implements Comparable<Instruction> {
         setLatency();
     }
 
+    // <tag> fu{<operation type>} src{<src1 reg#>,<src2 reg#>} dst{<dest reg#>} IF{<cycle>,<duration>} ID{<cycle>,<duration>} IS{<cycle>,<duration>} EX{<cycle>,<duration>} WB{<cycle>,<duration>} 
     @Override
     public String toString() {
-        return tag + " " + pc + " " + op + " " + dest + " " + src1 + " " + src2;
+        return tag + " "
+            + "fu{" + op + "} "
+            + "src{" + src1 + ", " + src2 + "} "
+            + "dst{" + dest + "} "
+            + "IF{" + c_IF + ", " + d_IF + "} "
+            + "ID{" + c_ID + ", " + d_ID + "} "
+            + "IS{" + c_IS + ", " + d_IS + "} "
+            + "EX{" + c_EX + ", " + d_EX + "} "
+            + "WB{" + c_WB + ", " + d_WB + "} ";
     }
 
     public void setState(State state) {
