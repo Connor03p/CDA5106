@@ -2,12 +2,12 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
 import java.util.Scanner;
-
 enum State {
     IF,
     ID,
@@ -62,7 +62,6 @@ public class Main {
 
         // Main Simulator Loop
         Iterator<Instruction> iterator = instructions.iterator();
-        int numCycles = 0;
         int instructionsProcessed = 0;
         Arrays.fill(register, Reg.free);
         do  {
@@ -74,7 +73,6 @@ public class Main {
                 fetch(iterator.next());
                 instructionsProcessed++;
             }
-            numCycles++;
         }
         while(advanceCycle(instructionsProcessed)); // Change to advanceCycle() when fakeRetire() is implemented
 
@@ -84,10 +82,12 @@ public class Main {
 
         System.out.println("Finshed Executing");
         System.out.println("number of instructions = "  + (tagNum));
-        System.out.println("number of cycles       = " + (numCycles));
-        System.out.println("IPC                    = " + (numCycles/tagNum));
+        System.out.println("number of cycles       = " + (PC));
+        System.out.println("IPC                    = " + (PC/tagNum));
         
     }
+
+    static int PC = 0;
 
     /**
      * This is a data structure that represents the trace file, holds all incoming instructions 
@@ -137,7 +137,7 @@ public class Main {
         
     private static boolean advanceCycle(int instructionsProcessed) {
         // Advance simulator cycle?
-        // int PC += 1?
+        PC += 1;
 
         // Check if Instruction List is empty, return false
         return !(instructionsProcessed >= instructions.size() && fakeROB.size() <= 0);
@@ -199,29 +199,34 @@ public class Main {
                 // issueList.add(i); // Auto increments because arraylist
                 // dispatchList.remove(i); // Same here, auto decrements because arraylist
 
-                // If an instruction's source registers are not being written, and if the destination register is
-                // not being written, then assign register modify reg[dest]
-                // This should prevent Write-After-Write errors 
-                // Instruction does not have destination register (is a conditional instruction)
-                if (i.dest == -1) {   
-                    i.setState(State.IS);
-                    issueList.add(i); // Auto increments because arraylist
-                    iterator.remove(); // Same here, auto decrements because arraylist
-                    System.out.println("  Moved instruction to issueList: " + i);
+
+                boolean isAssigned = false;
+            
+                // Instruction doesn't need a register? Simply proceed
+                if (i.src1 == -1 && i.src2 == -1) {
+                    isAssigned = true;
                 }
-                    
-                // Instruction has a destination register and can write to it
-                else if (register[i.dest] != Reg.write) {
-                    register[i.dest] = Reg.write;
-                    i.setState(State.IS);
-                    issueList.add(i); // Auto increments because arraylist
-                    iterator.remove(); // Move to next item
-                    System.out.println("  Moved instruction to issueList: " + i);
+                // Instruction is using 1 register, indicated by -1
+                else if (i.src2 == -1 && register[i.src1] != Reg.write) {
+                    isAssigned = true;
                 }
-                    // Instruction has a destination, but destination is currently being written to, stall.
+                else if (i.src1 == -1 && register[i.src2] != Reg.write) {
+                    isAssigned = true;
+                }
+                // Instruction is using two registers
+                else if (register[i.src1] != Reg.write && register[i.src2] != Reg.write) {
+                    isAssigned = true;
+                }
+                
+                // If an instruction's source registers are ready, we can proceed to be issued
+                if (isAssigned) {
+                    System.out.println("  Instruction " + i.tag + " moved to issueList.");
+                    i.setState(State.IS);
+                    iterator.remove();
+                    issueList.add(i);
+                }
                 else {
-                    // System.out.println("Instruction Stall. Register " + i.dest + " is currently being written to.");
-                    // iterator.remove(); // Move to next item
+                    System.out.println("  Instruction " + i.tag + " not ready, source is being written to");
                 }
             }
             else {
@@ -243,44 +248,24 @@ public class Main {
         System.out.println("Issue");
         System.out.println("  " + issueList.size() + " instructions in list");
 
+        // Issue instructions first based on their tag
+        Collections.sort(issueList);
+
         // Uses iterator to prevent concurrent modification exception
         Iterator<Instruction> iterator = issueList.iterator();
+
         while (iterator.hasNext()) {
             Instruction i = iterator.next();
             
-            // Assign instruction to a specific register, they need both registers, otherwise stall
-            // This should simiulate prevention of Read-After-Write Errors
-            // @NOTE - An instruction can only proceed if the source registers are 
+            i.setState(State.EX);
             
-            boolean isAssigned = false;
-            
-            // Instruction doesn't need a register? Simply proceed
-            if (i.src1 == -1 && i.src2 == -1) {
-                isAssigned = true;
+            // This register is now being written to.
+            if (i.dest != -1) {
+                register[i.dest] = Reg.write;
             }
-            // Instruction is using 1 register, indicated by -1
-            else if (i.src2 == -1 && register[i.src1] != Reg.write) {
-                isAssigned = true;
-            }
-            else if (i.src1 == -1 && register[i.src2] != Reg.write) {
-                isAssigned = true;
-            }
-            // Instruction is using two registers
-            else if (register[i.src1] != Reg.write && register[i.src2] != Reg.write) {
-                isAssigned = true;
-            }
-        
 
-            if (isAssigned) {
-                // Remove instruction from execution
-                System.out.println("  Instruction " + i.tag + " issued for execution.");
-                i.setState(State.EX);
-                iterator.remove();
-                executeList.add(i);
-            }
-            else {
-                // System.out.println("Instruction " + i.tag + " stalled due to data dependency.");
-            }
+            executeList.add(i);
+            iterator.remove();
         }
     }
 
@@ -335,7 +320,7 @@ public class Main {
     }
 }
 
-class Instruction {
+class Instruction implements Comparable<Instruction> {
     int pc, op, dest, src1, src2, tag;
     State state;
 
@@ -360,6 +345,13 @@ class Instruction {
 
     public void setState(State state) {
         this.state = state;
+    }
+
+    // Implement the compareTo method for sorting
+    @Override
+    public int compareTo(Instruction other) {
+        return Integer.compare(this.tag, other.tag); // Sort by pc, ascending order
+
     }
 
     /**
