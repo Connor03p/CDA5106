@@ -1,8 +1,6 @@
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -42,6 +40,17 @@ public class Main {
             String filename = inputScanner.nextLine();
             inputScanner.close();
         */
+        
+        try {
+            schedulingQueueSize = Integer.parseInt(args[0]);
+            fetchRate = Integer.parseInt(args[1]);
+            filename = args[2];
+            
+        } catch (Exception e) {
+            System.out.println("An error has occured, arguments potentially incorrect. Did you format it as: 'java Main <scheduleQueueSize> <fetchRate> <tracefile>'?");
+            return;
+        }
+
 
         File file = new File(filename);
         Scanner fileScanner;
@@ -89,11 +98,8 @@ public class Main {
                 }
             }
         }
-        while(advanceCycle(instructionsProcessed)); // Change to advanceCycle() when fakeRetire() is implemented
+        while(advanceCycle(instructionsProcessed));
 
-        /** 
-         * @TODO: Have a proper variable keep track of the number of cycles, and IPC 
-         */
         System.out.println("Writing output to file...");
         writeOutput(tagNum);
         System.out.println("Done!");
@@ -128,17 +134,17 @@ public class Main {
         }
     }
 
-    static int PC = 0;
+    private static int PC = 0;
 
     /**
      * This is a data structure that represents the trace file, holds all incoming instructions 
      */
-    static List<Instruction> instructions = new ArrayList<>();
+    private static List<Instruction> instructions = new ArrayList<>();
 
     /**
      * 
      */
-    static Queue<Instruction> fakeROB = new LinkedList<>();
+    private static Queue<Instruction> fakeROB = new LinkedList<>();
 
     /**
         This contains a list of instructions in either the IF or ID
@@ -146,21 +152,21 @@ public class Main {
         the IF and ID states, we don’t need to separately model the pipeline
         registers of the fetch and dispatch stages.)
     */
-    static List<Instruction> dispatchList = new ArrayList<>();
+    private static List<Instruction> dispatchList = new ArrayList<>();
 
     /**
         This contains a list of instructions in the IS state (waiting for
         operands or available issue bandwidth). The issue_list models the
         Scheduling Queue.
     */
-    static List<Instruction> issueList = new ArrayList<>();
+    private static List<Instruction> issueList = new ArrayList<>();
 
     /**
         This contains a list of instructions in the EX state (waiting
         for the execution latency of the operation). The execute_list models
         the FUs.
     */
-    static List<Instruction> executeList = new ArrayList<>();
+    private static List<Instruction> executeList = new ArrayList<>();
 
     /*
      *  This is the array that will simulate the 'register', its 127 in size since the
@@ -169,7 +175,7 @@ public class Main {
      * 
      *  set to null if unoccupied
      */
-    static Reg[] register = new Reg[127];
+    private static Reg[] register = new Reg[127];
 
     /**
      * @param List<Instruction> instructions
@@ -237,11 +243,6 @@ public class Main {
             // Only add instructions with 'ID' tag to new list
             // @NOTE - I'm assuming the 1 cycle stall is it starts at IF, otherwise start at 'ID'
             if (i.state == State.ID) {
-                // i.state = State.IS;
-                // issueList.add(i); // Auto increments because arraylist
-                // dispatchList.remove(i); // Same here, auto decrements because arraylist
-
-
                 boolean isAssigned = false;
             
                 // Instruction doesn't need a register? Simply proceed
@@ -261,7 +262,7 @@ public class Main {
                 }
                 
                 // If an instruction's source registers are ready, we can proceed to be issued
-                if (isAssigned) {
+                if (isAssigned && issueList.size() < schedulingQueueSize) {
                     System.out.println("  Instruction " + i.tag + " moved to issueList.");
                     i.setState(State.IS);
 
@@ -269,10 +270,10 @@ public class Main {
                     i.c_IS = PC;
 
                     iterator.remove();
-                    issueList.add(i);
+                    issueList.add(i); // automatically increments num in scheduling queue
                 }
                 else {
-                    System.out.println("  Instruction " + i.tag + " not ready, source is being written to");
+                    // System.out.println("  Instruction " + i.tag + " not ready, source is being written to or scheduling queue is full");
                 }
             }
             else {
@@ -315,7 +316,7 @@ public class Main {
             }
 
             executeList.add(i);
-            iterator.remove();
+            iterator.remove(); // removes item from scheduling queue, decrementing value 
         }
     }
 
