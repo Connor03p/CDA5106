@@ -84,7 +84,7 @@ public class Main {
         // Main Simulator Loop
         Iterator<Instruction> iterator = instructions.iterator();
         int instructionsProcessed = 0;
-        Arrays.fill(register, Reg.free);
+        Arrays.fill(register, -1);
         do  {
             fakeRetire();
             execute();
@@ -173,9 +173,10 @@ public class Main {
      *  current instruction set specifies instructions will only registers 0 - 127
      *  -1 is no reg, so do nothing with that
      * 
-     *  set to null if unoccupied
+     *  a register is 'renamed' via tagging that register with an instruction's tag. 
+     *  A register is not named if -1
      */
-    private static Reg[] register = new Reg[127];
+    private static int[] register = new int[127];
 
     /**
      * @param List<Instruction> instructions
@@ -243,26 +244,36 @@ public class Main {
             // Only add instructions with 'ID' tag to new list
             // @NOTE - I'm assuming the 1 cycle stall is it starts at IF, otherwise start at 'ID'
             if (i.state == State.ID) {
-                boolean isAssigned = false;
-            
                 // Instruction doesn't need a register? Simply proceed
                 if (i.src1 == -1 && i.src2 == -1) {
-                    isAssigned = true;
+                    i.isReady = true;
                 }
                 // Instruction is using 1 register, indicated by -1
-                else if (i.src2 == -1 && register[i.src1] != Reg.write) {
-                    isAssigned = true;
+                else if (i.src2 == -1 && register[i.src1] == -1) {
+                    i.isReady = true;
                 }
-                else if (i.src1 == -1 && register[i.src2] != Reg.write) {
-                    isAssigned = true;
+                else if (i.src1 == -1 && register[i.src2] == -1) {
+                    i.isReady = true;
                 }
-                // Instruction is using two registers
-                else if (register[i.src1] != Reg.write && register[i.src2] != Reg.write) {
-                    isAssigned = true;
+                // Instruction is using two registers and both are not being modified
+                else if (register[i.src1] == -1 && register[i.src2] == -1) {
+                    i.isReady = true;
+                }
+
+                // Register renaming before going into reservation tables
+                else if (!i.isRenamed && (register[i.src1] != -1 || register[i.src2] != - 1)) {
+                    i.isRenamed = true;
+                    
+                    if (i.src1 != -1) {
+                        i.renamedRegisters.add(register[i.src1]);
+                    }
+                    if (i.src2 != -1) {
+                        i.renamedRegisters.add(register[i.src2]);
+                    }
                 }
                 
-                // If an instruction's source registers are ready, we can proceed to be issued
-                if (isAssigned && issueList.size() < schedulingQueueSize) {
+                // If there is room in the reservation table, add it, else stall in this stage
+                if (issueList.size() < schedulingQueueSize) {
                     System.out.println("  Instruction " + i.tag + " moved to issueList.");
                     i.setState(State.IS);
 
@@ -274,6 +285,8 @@ public class Main {
                 }
                 else {
                     // System.out.println("  Instruction " + i.tag + " not ready, source is being written to or scheduling queue is full");
+                    // Instructions here should either have proceeded to the next stage, or have their renamed register and
+                    // awaiting for a spot in the reservation table. 
                 }
             }
             else {
@@ -297,11 +310,25 @@ public class Main {
         System.out.println("Issue");
         System.out.println("  " + issueList.size() + " instructions in list");
 
+        // Get a list of all ready instructions
+        List<Instruction> readyList = new ArrayList<>();
+        Iterator<Instruction> iterator = issueList.iterator();
+
+        while (iterator.hasNext()) {
+            Instruction i = iterator.next();
+
+            if (i.isReady) {
+                readyList.add(i);
+                iterator.remove();
+            }
+        }
+
+
         // Issue instructions first based on their tag
-        Collections.sort(issueList);
+        Collections.sort(readyList);
 
         // Uses iterator to prevent concurrent modification exception
-        Iterator<Instruction> iterator = issueList.iterator();
+        iterator = readyList.iterator();
 
         while (iterator.hasNext()) {
             Instruction i = iterator.next();
@@ -312,7 +339,7 @@ public class Main {
             
             // This register is now being written to.
             if (i.dest != -1) {
-                register[i.dest] = Reg.write;
+                register[i.dest] = i.tag;
             }
 
             executeList.add(i);
@@ -349,8 +376,13 @@ public class Main {
 
                 System.out.println("  Instruction " + i + " done executing.");
                 
-                if (i.dest != -1)
-                    register[i.dest] = Reg.free;
+                // Broadcast to all instructions in the scheduling queue that this instruction is finished
+                if (i.dest != -1) {
+                    for (Instruction b_i : issueList) {
+                        b_i.attemptWakeUp(i.tag);
+                    }
+                }
+                    
                 
                 iterator.remove();
             }       
@@ -387,6 +419,9 @@ class Instruction implements Comparable<Instruction> {
     int c_WB = -1, d_WB = -1;
 
     State state;
+    boolean isReady = false;
+    boolean isRenamed = false;
+    List<Integer> renamedRegisters = new ArrayList<>();
 
     int latency;
     int exeTimer = 0;
@@ -444,6 +479,25 @@ class Instruction implements Comparable<Instruction> {
                 break;
             default:
                 break;
+        }
+    }
+    /**
+     * If the instruction recieves a tag in their renamedRegister, it will remove it
+     * If it no longer waiting for a result (renameRegister is empty), then set this instruction to ready
+     * 
+     * @param tag - The tag being broadcast to the instruction
+     * 
+     */
+    public void attemptWakeUp(int tag) {
+        if (renamedRegisters.contains(tag)) {
+            renamedRegisters.remove(Integer.valueOf(tag));
+        }
+
+        if (renamedRegisters.isEmpty()) {
+            isReady = true;
+        }
+        else {
+            System.err.println("Fail to wake up, waiting on: " + renamedRegisters);
         }
     }
 }
