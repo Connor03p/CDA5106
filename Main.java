@@ -46,7 +46,7 @@ public class Main {
             fetchRate = Integer.parseInt(args[1]);
             filename = args[2];
             
-        } catch (Exception e) {
+        } catch (NumberFormatException e) {
             System.out.println("An error has occured, arguments potentially incorrect. Did you format it as: 'java Main <scheduleQueueSize> <fetchRate> <tracefile>'?");
             return;
         }
@@ -115,16 +115,13 @@ public class Main {
 
         Path fileName = Path.of("./pipe_" + schedulingQueueSize + "_" + fetchRate + "_" + name + ".txt");
 
-        Iterator<Instruction> iterator = instructions.iterator();
-        while (iterator.hasNext())
-        {
-            Instruction i = iterator.next();
+        for (Instruction i : instructions) {
             text += i + "\n";
         }
 
         text += "number of instructions = " + (tagNum) + "\n";
         text += "number of cycles       = " + (PC) + "\n";
-        text += "IPC                    = " + (PC/tagNum);
+        text += "IPC                    = " + (float)(PC/tagNum);
 
         try {
             Files.writeString(fileName, text);
@@ -264,12 +261,21 @@ public class Main {
                 else if (!i.isRenamed && (register[i.src1] != -1 || register[i.src2] != - 1)) {
                     i.isRenamed = true;
                     
-                    if (i.src1 != -1) {
+                    // Rename source operands by looking up state in register
+                    // Instruction is not dependant if the register is empty or its source is -1 
+
+                    if (i.src1 != -1 && register[i.src1] != -1) {
                         i.renamedRegisters.add(register[i.src1]);
                     }
-                    if (i.src2 != -1) {
+                    if (i.src2 != -1 && register[i.src2] != -1) {
                         i.renamedRegisters.add(register[i.src2]);
                     }
+                    // Rename Destination by updating state in register
+                    if (i.dest != -1) {
+                        register[i.dest] = i.tag;
+                    }
+
+                    System.out.println("  Instruction " + i.tag + "renamed to: " + i.renamedRegisters);
                 }
                 
                 // If there is room in the reservation table, add it, else stall in this stage
@@ -321,6 +327,9 @@ public class Main {
                 readyList.add(i);
                 iterator.remove();
             }
+            else {
+                System.out.println(" Instruction " + i.tag + " is not ready, waiting on: " + i.renamedRegisters);
+            }
         }
 
 
@@ -336,11 +345,6 @@ public class Main {
             i.setState(State.EX);
             i.d_IS = PC - i.c_IS;
             i.c_EX = PC;
-            
-            // This register is now being written to.
-            if (i.dest != -1) {
-                register[i.dest] = i.tag;
-            }
 
             executeList.add(i);
             iterator.remove(); // removes item from scheduling queue, decrementing value 
@@ -374,7 +378,7 @@ public class Main {
                 i.d_EX = PC - i.c_EX;
                 i.c_WB = PC;
 
-                System.out.println("  Instruction " + i + " done executing.");
+                System.out.println("  Instruction " + i + " done executing. Broadcasting to reservation tables");
                 
                 // Broadcast to all instructions in the scheduling queue that this instruction is finished
                 if (i.dest != -1) {
@@ -383,7 +387,6 @@ public class Main {
                     }
                 }
                     
-                
                 iterator.remove();
             }       
         }
