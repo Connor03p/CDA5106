@@ -12,10 +12,10 @@ public class Batch {
         String filename = "./traces/val_trace_gcc.txt";
 
         List<Instruction> instructions = readTraceFile(filename, 10);
-        System.out.println("Read " + instructions.size() + " instructions.");
+        System.out.println("\nRead " + instructions.size() + " instructions from '" + filename + "'");
 
         List<Dependency> dependencies = getDependencies(instructions);
-        System.out.println("Found " + dependencies.size() + " dependencies:");
+        System.out.println("\nFound " + dependencies.size() + " dependencies:");
         System.out.println(dependencies);
     }
 
@@ -24,8 +24,36 @@ public class Batch {
         List<Dependency> dependencies = new ArrayList<>();
         
         for (int i = 0; i < instructions.size(); i++) {
-            
+            Instruction i1 = instructions.get(i);
 
+            // For all instructions after i
+            for (int j = i + 1; j < instructions.size(); j++) {
+                Instruction i2 = instructions.get(j);
+                
+                // Check for true (read after write) and output (write after write) dependencies
+                boolean hasTrue = (i1.dest != -1) && (i1.dest == i2.src1 || i1.dest == i2.src2);
+                boolean hasOut = (i1.dest != -1) && (i1.dest == i2.dest);
+                boolean hasAnti = (i1.src1 != -1 && i1.src1 == i2.dest) || (i1.src2 != -1 && i1.src2 == i2.dest);
+
+                if (hasTrue) {
+                    Dependency d = new Dependency(i1.tag, i2.tag, Dependency.Type.TRUE);
+                    i1.dependencies.add(d);
+                    dependencies.add(d);
+                }
+
+                if (hasOut) {
+                    Dependency d = new Dependency(i1.tag, i2.tag, Dependency.Type.OUT);
+                    i1.dependencies.add(d);
+                    dependencies.add(d);
+                }
+
+                if (hasAnti) {
+                    Dependency d = new Dependency(i1.tag, i2.tag, Dependency.Type.ANTI);
+                    i1.dependencies.add(d);
+                    dependencies.add(d);
+                }
+                
+            }
         }
 
         return dependencies;
@@ -67,11 +95,20 @@ public class Batch {
 class Dependency {
     int tag1 = -1, tag2 = -1;
     Type type = null;
+
+    Dependency(int t1, int t2, Type type) {
+        this.type = type;
+        this.tag1 = t1;
+        this.tag2 = t2;
+    }
     
     public static enum Type {
-        TRUE,
-        ANTI,
-        OUT;
+        TRUE, ANTI, OUT;
+    }
+
+    @Override
+    public String toString() {
+        return "(" + tag1 + ", " + tag2 + ": " + type + ")";
     }
 }
 
