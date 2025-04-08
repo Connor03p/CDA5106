@@ -4,7 +4,13 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
-    
+        {
+            "type": "java",
+            "name": "Batch",
+            "request": "launch",
+            "mainClass": "batching.Batch",
+            "projectName": "CDA5106_3c5fe320"
+        },
         {
             "type": "java",
             "name": "Current File",
