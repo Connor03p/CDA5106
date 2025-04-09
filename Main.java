@@ -29,9 +29,9 @@ enum Reg {
 public class Main {
 
     // Variables chosen by user
-    static int schedulingQueueSize = 128;
+    static int schedulingQueueSize = 8;
     static int fetchRate = 8;
-    static String filename = "./traces/val_trace_perl.txt";
+    static String filename = "./traces/val_trace_gcc.txt";
 
     public static void main(String args[]) {
         
@@ -313,7 +313,6 @@ public class Main {
 
             if (i.isReady) {
                 readyList.add(i);
-                iterator.remove();
             }
             else {
                 System.out.println(" Instruction " + i.tag + " is not ready, waiting on: " + i.renamedRegisters);
@@ -326,8 +325,9 @@ public class Main {
 
         // Uses iterator to prevent concurrent modification exception
         iterator = readyList.iterator();
-
-        while (iterator.hasNext()) {
+        int limit = fetchRate + 1;
+        int counter = 0;
+        while (iterator.hasNext() && counter < limit) {
             Instruction i = iterator.next();
             
             i.setState(State.EX);
@@ -336,6 +336,8 @@ public class Main {
 
             executeList.add(i);
             iterator.remove(); // removes item from scheduling queue, decrementing value 
+            issueList.remove(i);
+            counter++;
         }
     }
 

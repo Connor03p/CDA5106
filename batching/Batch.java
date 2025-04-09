@@ -3,6 +3,7 @@ package batching;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Scanner;
 
@@ -11,12 +12,21 @@ public class Batch {
     public static void main(String args[]) {
         String filename = "./traces/val_trace_gcc.txt";
 
-        List<Instruction> instructions = readTraceFile(filename, 10);
+        List<Instruction> instructions = readTraceFile(filename, 10000);
         System.out.println("\nRead " + instructions.size() + " instructions from '" + filename + "'");
 
         List<Dependency> dependencies = getDependencies(instructions);
         System.out.println("\nFound " + dependencies.size() + " dependencies:");
-        System.out.println(dependencies);
+        //System.out.println(dependencies);
+
+        Collections.sort(instructions);
+
+        int i = 0;
+        while (instructions.get(i).dependencies.size() == 0) {
+            System.out.println(instructions.get(i));
+            i++;
+        }
+        
     }
 
     public static List<Dependency> getDependencies(List<Instruction> instructions) {
@@ -136,6 +146,6 @@ class Instruction implements Comparable<Instruction> {
 
     @Override // Sort by PC in ascending order
     public int compareTo(Instruction other) {
-        return Integer.compare(this.tag, other.tag); 
+        return Integer.compare(this.dependencies.size(), other.dependencies.size()); 
     }
 }
