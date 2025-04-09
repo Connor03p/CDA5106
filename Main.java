@@ -7,54 +7,33 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
-import java.util.LinkedList;
 import java.util.List;
-import java.util.Queue;
 import java.util.Scanner;
-
-enum State {
-    IF,
-    ID,
-    IS,
-    EX,
-    WB;
-}
-
-enum Reg {
-    free,
-    write,
-}
-
 
 public class Main {
 
     // Variables chosen by user
-    static int schedulingQueueSize = 1;
-    static int fetchRate = 1;
+    static int schedulingQueueSize = 8;
+    static int fetchRate = 8;
     static String filename = "./traces/val_trace_gcc.txt";
 
     public static void main(String args[]) {
-        /*
-            Scanner inputScanner = new Scanner(System.in);
-            System.out.println("Enter trace file:");
-            String filename = inputScanner.nextLine();
-            inputScanner.close();
-        */
-        
         try {
-            schedulingQueueSize = Integer.parseInt(args[0]);
-            fetchRate = Integer.parseInt(args[1]);
-            filename = args[2];
+            if (args.length != 0) {
+                schedulingQueueSize = Integer.parseInt(args[0]);
+                fetchRate = Integer.parseInt(args[1]);
+                filename = args[2];
+            }
             
         } catch (NumberFormatException e) {
             System.out.println("An error has occured, arguments potentially incorrect. Did you format it as: 'java Main <scheduleQueueSize> <fetchRate> <tracefile>'?");
             return;
         }
 
-
         File file = new File(filename);
         Scanner fileScanner;
         int tagNum = 0;
+        List<Instruction> instructions = new ArrayList<>();
         
         try {
             fileScanner = new Scanner(file);
@@ -79,33 +58,21 @@ public class Main {
         } catch (FileNotFoundException e) {
             System.out.println("Error reading file.");
             return;
-        }        
+        }     
 
-        // Main Simulator Loop
-        Iterator<Instruction> iterator = instructions.iterator();
-        int instructionsProcessed = 0;
-        Arrays.fill(register, -1);
-        do  {
-            fakeRetire();
-            execute();
-            issue();
-            dispatch();
-            
-            for (int i = 0; i < fetchRate; i++) {
-                if (iterator.hasNext()) {
-                    fetch(iterator.next());
-                    instructionsProcessed++;
-                }
-            }
-        }
-        while(advanceCycle(instructionsProcessed));
 
-        System.out.println("Writing output to file...");
-        writeOutput(tagNum);
-        System.out.println("Done!");
-    }
+        Simulator.fetchRate = fetchRate;
+        Simulator.dispatchSize = fetchRate * 2; // The Dispatch Queue is 2N instructions in size
+        Simulator.issueSize = schedulingQueueSize;
+        
+        Simulator.dispatch_list = new ArrayList<Instruction>(Simulator.dispatchSize);
+        Simulator.issue_list = new ArrayList<Instruction>(Simulator.issueSize);
+        Simulator.execute_list = new ArrayList<Instruction>();
 
-    private static void writeOutput(int tagNum) {
+        Simulator.run(instructions);
+
+        System.out.println("Finished! Writing to file...");
+
         // Data to be written in file
         String text = "";
 
@@ -120,314 +87,258 @@ public class Main {
         }
 
         text += "number of instructions = " + (tagNum) + "\n";
-        text += "number of cycles       = " + (PC) + "\n";
-        text += "IPC                    = " + (float)(PC/tagNum);
+        text += "number of cycles       = " + (Simulator.PC) + "\n";
+        text += "IPC                    = " + (float)(Simulator.PC) / (float)(tagNum);
 
         try {
             Files.writeString(fileName, text);
+            System.out.println("Wrote to " + filename);
         } 
           catch (IOException e) {
             System.err.println("An error occurred: " + e.getMessage());
         }
     }
+}
 
-    private static int PC = 0;
+class Simulator {
 
-    /**
-     * This is a data structure that represents the trace file, holds all incoming instructions 
-     */
-    private static List<Instruction> instructions = new ArrayList<>();
+    public static int fetchRate = 1;
+    public static int issueSize = 1;
+    public static int dispatchSize = 1;
+    public static int PC = 0;
 
-    /**
-     * 
-     */
-    private static Queue<Instruction> fakeROB = new LinkedList<>();
+    /** Program iterator */
+    private static Iterator<Instruction> iterator;
 
-    /**
-        This contains a list of instructions in either the IF or ID
-        state. The dispatch_list models the Dispatch Queue. (By including both
-        the IF and ID states, we don’t need to separately model the pipeline
-        registers of the fetch and dispatch stages.)
-    */
-    private static List<Instruction> dispatchList = new ArrayList<>();
+    /** A circular FIFO that holds all active instructions in their program order */
+    public static CircularQueue FakeROB = new CircularQueue(1024);
+ 
+    /** Contains all in IF or ID. Models the scheduling Queue */
+    public static List<Instruction> dispatch_list;
 
-    /**
-        This contains a list of instructions in the IS state (waiting for
-        operands or available issue bandwidth). The issue_list models the
-        Scheduling Queue.
-    */
-    private static List<Instruction> issueList = new ArrayList<>();
+    /** Contains all in IS. Models the scheduling Queue. */
+    public static List<Instruction> issue_list;
 
-    /**
-        This contains a list of instructions in the EX state (waiting
-        for the execution latency of the operation). The execute_list models
-        the FUs.
-    */
-    private static List<Instruction> executeList = new ArrayList<>();
+    /** Contains all in EX. Models the scheduling Queue */
+    public static List<Instruction> execute_list;
 
-    /*
-     *  This is the array that will simulate the 'register', its 127 in size since the
-     *  current instruction set specifies instructions will only registers 0 - 127
-     *  -1 is no reg, so do nothing with that
-     * 
-     *  a register is 'renamed' via tagging that register with an instruction's tag. 
-     *  A register is not named if -1
-     */
-    private static int[] register = new int[127];
+    /** Register File */
+    public static int[] register = new int[127];
 
-    /**
-     * @param List<Instruction> instructions
-     * @return boolean - If the list is empty, return false and stop execution
-     */
-        
-    private static boolean advanceCycle(int instructionsProcessed) {
-        // Advance simulator cycle?
-        PC += 1;
+    public static void run(List<Instruction> instructions)
+    {
+        Simulator.iterator = instructions.iterator();
+        Arrays.fill(register, -1);
 
-        // Check if Instruction List is empty, return false
-        return !(instructionsProcessed >= instructions.size() && fakeROB.size() <= 0);
-
+        do  {
+            fakeRetire();
+            execute();
+            issue();
+            dispatch();
+            fetch();
+        }
+        while(advanceCycle());
     }
 
-    /**
-     * IF Stage:
-     * Should do the following:
-     * 1. Push new instruction from instruction list to fake-ROB. Initialize the instruction's data structure
-     *    including setting its state to IF.
-     * 2. Add the instruction to the dispatch_list and reserve a dispatch queue entry 
-     *    (increment count of the number of instruction in the dispatch queue)
-     * 
-     * @param Instruction instruction - an instruction to be configured, and added to dispatch_list
-     * 
-     */
-    private static void fetch(Instruction instruction) {
+    private static void fetch() {
         System.out.println("Fetch");
-        // Here, we are setting the instruction to IF, not sure what the initializing the data structure is (besides creating it?);
-        instruction.setState(State.IF);
-        instruction.c_IF = PC;
+        for (int i = 0; i < fetchRate; i++) {
+            
+            if (!iterator.hasNext())
+                return;
         
-        // Push instruction to fake ROB
-        fakeROB.add(instruction);
+            if (dispatch_list.size() >= dispatchSize) {
+                System.out.println("  Could not fetch: Dispatch list full");
+                return;
+            }
 
-        // Push to dispatch_list, dispatchList.size() should give us the count of this arraylist.
-        dispatchList.add(instruction);
+            Instruction instruction = iterator.next();
 
-        System.out.println("  Fetched instruction: " + instruction);
+            // Push the new instruction onto the fake-ROB.
+            FakeROB.enqueue(instruction);
+
+            // Set instruction state to IF
+            instruction.state = State.IF;
+            instruction.c_IF = PC;
+
+            // Add the instruction to the dispatch_list
+            dispatch_list.add(instruction);
+
+            System.out.println("  Fetched instruction " + instruction.tag);
+        }  
     }
 
-    /**
-     * ID Stage:
-     * Should do the following:
-     * From dispatch_list, construct a temp list of instructions in the ID state 
-     * 
-     * Scan the temp list in ascending order of tags and if the scheduling queue is not full, then:
-     * 1. Remove the instruction from the dispatch_list and add it to the issue_list. Reserve a schedule
-     *    queue entry (e.g. increment a count of the number of instructions in the scheduling queue) and
-     *    free a dispatch queue entry (e.g. decrement a count of the number of instructions in the dispatch queue)
-     * 2. Transition from the ID state to the IS state
-     * 3. Rename source operands by lookingg up state in the register file:
-     * 
-     */
-    private static void dispatch() {
+    private static void dispatch() {     
         System.out.println("Dispatch");
-        System.out.println("  " + dispatchList.size() + " instructions in list");
 
-        Iterator<Instruction> iterator = dispatchList.iterator();
+        // From the dispatch_list, construct a temp list of instructions in ID state
+        List<Instruction> ID_instructions = new ArrayList<Instruction>();
+        for(Instruction i : dispatch_list)
+            if(i.state == State.ID)
+                ID_instructions.add(i);
+        
+        // Scan the temp list in ascending order of tags
+        Collections.sort(ID_instructions, (i1, i2) -> i1.tag - i2.tag);
+        Iterator<Instruction> ID_itr = ID_instructions.iterator();
+        while (ID_itr.hasNext()) {
+            Instruction i = ID_itr.next();
+            
+            // Check if scheduling queue is full
+            if (issue_list.size() >= issueSize)
+                continue;
 
-
-        while (iterator.hasNext()) {
-            Instruction i = iterator.next();
-
-            // Only add instructions with 'ID' tag to new list
-            // @NOTE - I'm assuming the 1 cycle stall is it starts at IF, otherwise start at 'ID'
-            if (i.state == State.ID) {
-                // Instruction doesn't need a register? Simply proceed
-                if (i.src1 == -1 && i.src2 == -1) {
-                    i.isReady = true;
-                }
-                // Instruction is using 1 register, indicated by -1
-                else if (i.src2 == -1 && register[i.src1] == -1) {
-                    i.isReady = true;
-                }
-                else if (i.src1 == -1 && register[i.src2] == -1) {
-                    i.isReady = true;
-                }
-                // Instruction is using two registers and both are not being modified
-                else if (register[i.src1] == -1 && register[i.src2] == -1) {
-                    i.isReady = true;
-                }
-
-                // Register renaming before going into reservation tables
-                else if (!i.isRenamed && (register[i.src1] != -1 || register[i.src2] != - 1)) {
-                    i.isRenamed = true;
-                    
-                    // Rename source operands by looking up state in register
-                    // Instruction is not dependant if the register is empty or its source is -1 
-
-                    if (i.src1 != -1 && register[i.src1] != -1) {
-                        i.renamedRegisters.add(register[i.src1]);
-                    }
-                    if (i.src2 != -1 && register[i.src2] != -1) {
-                        i.renamedRegisters.add(register[i.src2]);
-                    }
-                    // Rename Destination by updating state in register
-                    if (i.dest != -1) {
-                        register[i.dest] = i.tag;
-                    }
-
-                    System.out.println("  Instruction " + i.tag + "renamed to: " + i.renamedRegisters);
-                }
-                
-                // If there is room in the reservation table, add it, else stall in this stage
-                if (issueList.size() < schedulingQueueSize) {
-                    System.out.println("  Instruction " + i.tag + " moved to issueList.");
-                    i.setState(State.IS);
-
-                    i.d_ID = PC - i.c_ID;
-                    i.c_IS = PC;
-
-                    iterator.remove();
-                    issueList.add(i); // automatically increments num in scheduling queue
-                }
-                else {
-                    // System.out.println("  Instruction " + i.tag + " not ready, source is being written to or scheduling queue is full");
-                    // Instructions here should either have proceeded to the next stage, or have their renamed register and
-                    // awaiting for a spot in the reservation table. 
-                }
+            // Check if src1 and src2 are in use
+            if ((i.src1 != -1 && register[i.src1] != -1) || (i.src2 != -1 && register[i.src2] != -1)) {
+                continue;
             }
-            else {
-                i.setState(State.ID);
-                i.d_IF = PC - i.c_IF;
-                i.c_ID = PC;
-            }
+
+            // Remove the instruction from the dispatch_list
+            ID_itr.remove();
+            dispatch_list.remove(i);
+
+            // Transition from the ID state to the IS state
+            i.state = State.IS;
+            i.d_ID = PC - i.c_ID;
+            i.c_IS = PC;
+            System.out.println("  Moved " + i.tag + " to IS");
+            
+            // Add it to the issue_list. Reserve a schedule queue entry 
+            issue_list.add(i);            
+        }
+
+        Iterator<Instruction> dispatch_itr = dispatch_list.iterator();
+        while (dispatch_itr.hasNext()) {
+            Instruction i = dispatch_itr.next();
+
+            if (i.state != State.IF)
+                continue;
+
+            i.state = State.ID;
+            i.d_IF = PC - i.c_IF;
+            i.c_ID = PC;
+            System.out.println("  Moved " + i.tag + " to ID");
         }
     }
 
-    /**
-     * IS Stage:
-     *  From the issue_list, construct a temp list of instructions whose operands are ready – these are the READY instructions.
-     * Scan the READY instructions in ascending order of tags and issue up to N+1 of them. To issue an instruction:
-     *  1) Remove the instruction from the issue_list and add it to the execute_list.
-     *  2) Transition from the IS state to the EX state.
-     *  3) Free up the scheduling queue entry (e.g., decrement a count of the number of instructions in the scheduling queue)
-     *  4) Set a timer in the instruction’s data structure that will allow you to model the execution latency 
-     */
     private static void issue() {
         System.out.println("Issue");
-        System.out.println("  " + issueList.size() + " instructions in list");
+        // From the issue_list, construct a temp list of instructions which are ready
+        Collections.sort(issue_list, (i1, i2) -> i1.tag - i2.tag);
+        List<Instruction> ready_list = new ArrayList<Instruction>();
+        for(Instruction i : issue_list) {
+            if (i.dest_ready) {
+                if (i.dest != -1)
+                    register[i.dest] = i.tag;
 
-        // Get a list of all ready instructions
-        List<Instruction> readyList = new ArrayList<>();
-        Iterator<Instruction> iterator = issueList.iterator();
-
-        while (iterator.hasNext()) {
-            Instruction i = iterator.next();
-
-            if (i.isReady) {
-                readyList.add(i);
-                iterator.remove();
-            }
-            else {
-                System.out.println(" Instruction " + i.tag + " is not ready, waiting on: " + i.renamedRegisters);
+                ready_list.add(i);
             }
         }
 
+        // Scan the temp list in ascending order of tags
+        Collections.sort(ready_list, (i1, i2) -> i1.tag - i2.tag);
+        Iterator<Instruction> ready_itr = ready_list.iterator();
 
-        // Issue instructions first based on their tag
-        Collections.sort(readyList);
+        // Issue up to N+1 of them
+        int issueCount = 0;
 
-        // Uses iterator to prevent concurrent modification exception
-        iterator = readyList.iterator();
+        while (ready_itr.hasNext() && issueCount < fetchRate) {
+            // Remove the instruction from the issue_list
+            Instruction i = ready_itr.next();
+            issue_list.remove(i);
 
-        while (iterator.hasNext()) {
-            Instruction i = iterator.next();
-            
-            i.setState(State.EX);
+            i.state = State.EX;
             i.d_IS = PC - i.c_IS;
             i.c_EX = PC;
+            
+            execute_list.add(i);
 
-            executeList.add(i);
-            iterator.remove(); // removes item from scheduling queue, decrementing value 
+            issueCount++;
+            ready_itr.remove();
+            System.out.println("  Moved " + i.tag + " to EX");
         }
     }
 
-    /**
-     * EX Stage:
-     * Should do the following:
-     *  1. Remove instruction from execute_list
-     *  2. Transition from EX state to WB state
-     *  3. Update register file state and wake up dependant instructions (set operand ready flags)
-     */
     private static void execute() {
         System.out.println("Execute");
-        System.out.println("  " + executeList.size() + " instructions in list");
-        Iterator<Instruction> iterator = executeList.iterator();
-        while (iterator.hasNext()) {
-            Instruction i = iterator.next();
+        System.out.println("  " + execute_list.size() + " instructions in list");
+        Iterator<Instruction> exe_itr = execute_list.iterator();
+        while (exe_itr.hasNext()) {
+            Instruction i = exe_itr.next();
             
             // Increment timer to simulate execution latency
-            if (i.exeTimer < i.latency) {
+            if (i.exeTimer < i.latency - 1) {
                 i.exeTimer++; 
                 System.out.println("  Instruction " + i.tag + " timer: " + i.exeTimer + "/" + i.latency);
             }
                
             // When the timer finishes, move to WB state
             else {
-                i.setState(State.WB);
+                
+                if (i.dest != -1 && register[i.dest] == i.tag)
+                    register[i.dest] = -1;
+                
+                for (int j = 0; j < issue_list.size(); j++)
+                {
+                    issue_list.get(j).wake();
+                }
 
+                i.state = State.WB;
                 i.d_EX = PC - i.c_EX;
                 i.c_WB = PC;
 
-                System.out.println("  Instruction " + i + " done executing. Broadcasting to reservation tables");
-                
-                // Broadcast to all instructions in the scheduling queue that this instruction is finished
-                if (i.dest != -1) {
-                    for (Instruction b_i : issueList) {
-                        b_i.attemptWakeUp(i.tag);
-                    }
-                }
-                    
-                iterator.remove();
+                System.out.println("  Instruction " + i.tag + " done executing");
+                exe_itr.remove();
             }       
         }
     }
-    /**
-     * Removes instructions from the head of the fake-ROB
-     * until an instruction is reached that is not in the WB state
-     */
+
     private static void fakeRetire() {
         System.out.println("FakeRetire");
-
-
-        while (true) { 
-            if (!fakeROB.isEmpty() && fakeROB.peek().state == State.WB) {
-                Instruction i = fakeROB.remove();
-                i.d_WB = PC - i.c_WB;
+        while (true) {
+            if (!FakeROB.isEmpty() && FakeROB.peek().state == State.WB) {
+                Instruction i = FakeROB.dequeue();
+                i.d_WB = 1;
+                System.out.println("  Retired " + i.tag);
             }
             else {
                 break;
             }
         }
     }
+
+    private static boolean advanceCycle() {
+        PC++;
+        //if (PC > 10) return false;
+        return !(FakeROB.isEmpty() && PC > 5);
+    }
+
+}
+
+enum State {
+    IF,
+    ID,
+    IS,
+    EX,
+    WB;
 }
 
 class Instruction implements Comparable<Instruction> {
+    // Values from trace file
     int pc, op, dest, src1, src2, tag;
+    boolean src1_ready = true, src2_ready = true, dest_ready = true;
 
     // Store cycle and duration instruction was in each state for final output
+    State state;
     int c_IF = -1, d_IF = -1;
     int c_ID = -1, d_ID = -1;
     int c_IS = -1, d_IS = -1;
     int c_EX = -1, d_EX = -1;
     int c_WB = -1, d_WB = -1;
 
-    State state;
-    boolean isReady = false;
-    boolean isRenamed = false;
-    List<Integer> renamedRegisters = new ArrayList<>();
-
+    // Values needed for simulation
     int latency;
     int exeTimer = 0;
+    
 
     Instruction(int pc, int op, int dest, int src1, int src2, int tag) {
         this.pc = pc;
@@ -445,24 +356,26 @@ class Instruction implements Comparable<Instruction> {
     public String toString() {
         return tag + " "
             + "fu{" + op + "} "
-            + "src{" + src1 + ", " + src2 + "} "
+            + "src{" + src1 + "," + src2 + "} "
             + "dst{" + dest + "} "
-            + "IF{" + c_IF + ", " + d_IF + "} "
-            + "ID{" + c_ID + ", " + d_ID + "} "
-            + "IS{" + c_IS + ", " + d_IS + "} "
-            + "EX{" + c_EX + ", " + d_EX + "} "
-            + "WB{" + c_WB + ", " + d_WB + "} ";
-    }
-
-    public void setState(State state) {
-        this.state = state;
+            + "IF{" + c_IF + "," + d_IF + "} "
+            + "ID{" + c_ID + "," + d_ID + "} "
+            + "IS{" + c_IS + "," + d_IS + "} "
+            + "EX{" + c_EX + "," + d_EX + "} "
+            + "WB{" + c_WB + "," + d_WB + "}";
     }
 
     // Implement the compareTo method for sorting
     @Override
     public int compareTo(Instruction other) {
         return Integer.compare(this.tag, other.tag); // Sort by pc, ascending order
+    }
 
+    public void wake() {
+        this.dest_ready =
+            (src1 == -1 || Simulator.register[src1] == -1) 
+            && (src2 == -1 || Simulator.register[src2] == -1)
+            && (dest == -1 || Simulator.register[dest] == -1);
     }
 
     /**
@@ -484,23 +397,48 @@ class Instruction implements Comparable<Instruction> {
                 break;
         }
     }
-    /**
-     * If the instruction recieves a tag in their renamedRegister, it will remove it
-     * If it no longer waiting for a result (renameRegister is empty), then set this instruction to ready
-     * 
-     * @param tag - The tag being broadcast to the instruction
-     * 
-     */
-    public void attemptWakeUp(int tag) {
-        if (renamedRegisters.contains(tag)) {
-            renamedRegisters.remove(Integer.valueOf(tag));
-        }
+}
 
-        if (renamedRegisters.isEmpty()) {
-            isReady = true;
+// From https://codingtechroom.com/tutorial/java-implementing-circular-fifo-queue-in-java
+class CircularQueue {
+    private Instruction[] queue;
+    private int front, rear, capacity;
+    public int size = 0;
+
+    public CircularQueue(int size) {
+        queue = new Instruction[size];
+        capacity = size;
+        front = rear = 0;
+    }
+
+    public boolean isEmpty() {
+        return (size == 0);
+    }
+
+    public void enqueue(Instruction item) {
+        if ((rear + 1) % capacity == front) {
+            return;
         }
-        else {
-            System.err.println("Fail to wake up, waiting on: " + renamedRegisters);
+        queue[rear] = item;
+        rear = (rear + 1) % capacity;
+        size++;
+    }
+
+    public Instruction dequeue() {
+        if (front == rear) {
+            return null; // Indicating an error
         }
+        Instruction item = queue[front];
+        front = (front + 1) % capacity;
+        size--;
+        return item;
+    }
+
+    public Instruction peek() {
+        if (front == rear) {
+            System.out.println("Queue is empty");
+            return null; // Indicate an error
+        }
+        return queue[front];
     }
 }
