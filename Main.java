@@ -142,29 +142,32 @@ class Simulator {
 
     private static void fetch() {
         System.out.println("Fetch");
-        for (int i = 0; i < fetchRate; i++) {
+        for (int j = 0; j < fetchRate; j++) {
             
+            // Check if at end of trace file
             if (!iterator.hasNext())
                 return;
-        
+
+            // Check if dispatch list is full
             if (dispatch_list.size() >= dispatchSize) {
                 System.out.println("  Could not fetch: Dispatch list full");
                 return;
             }
 
-            Instruction instruction = iterator.next();
+            // Get next instruction
+            Instruction i = iterator.next();
 
             // Push the new instruction onto the fake-ROB.
-            FakeROB.enqueue(instruction);
+            FakeROB.enqueue(i);
 
             // Set instruction state to IF
-            instruction.state = State.IF;
-            instruction.c_IF = PC;
+            i.state = State.IF;
+            i.c_IF = PC;
 
             // Add the instruction to the dispatch_list
-            dispatch_list.add(instruction);
+            dispatch_list.add(i);
 
-            System.out.println("  Fetched instruction " + instruction.tag);
+            System.out.println("  Fetched instruction " + i.tag);
         }  
     }
 
@@ -187,11 +190,6 @@ class Simulator {
             if (issue_list.size() >= issueSize)
                 continue;
 
-            // Check if src1 and src2 are in use
-            if ((i.src1 != -1 && register[i.src1] != -1) || (i.src2 != -1 && register[i.src2] != -1)) {
-                continue;
-            }
-
             // Remove the instruction from the dispatch_list
             ID_itr.remove();
             dispatch_list.remove(i);
@@ -201,6 +199,17 @@ class Simulator {
             i.d_ID = PC - i.c_ID;
             i.c_IS = PC;
             System.out.println("  Moved " + i.tag + " to IS");
+
+            // Rename source operands by looking up state in the register file
+            if (i.src1 != -1 && register[i.src1] != -1)
+                i.renamedRegisters.add(register[i.src1]);
+
+            if (i.src2 != -1 && register[i.src2] != -1)
+                i.renamedRegisters.add(register[i.src2]);
+
+            // Rename destination by updating state in the register file.
+            if (i.dest != -1)
+                register[i.dest] = i.tag;
             
             // Add it to the issue_list. Reserve a schedule queue entry 
             issue_list.add(i);            
@@ -226,10 +235,7 @@ class Simulator {
         Collections.sort(issue_list, (i1, i2) -> i1.tag - i2.tag);
         List<Instruction> ready_list = new ArrayList<Instruction>();
         for(Instruction i : issue_list) {
-            if (i.dest_ready) {
-                if (i.dest != -1)
-                    register[i.dest] = i.tag;
-
+            if (i.ready) {
                 ready_list.add(i);
             }
         }
@@ -279,7 +285,7 @@ class Simulator {
                 
                 for (int j = 0; j < issue_list.size(); j++)
                 {
-                    issue_list.get(j).wake();
+                    issue_list.get(j).wake(i.dest);
                 }
 
                 i.state = State.WB;
@@ -325,7 +331,8 @@ enum State {
 class Instruction implements Comparable<Instruction> {
     // Values from trace file
     int pc, op, dest, src1, src2, tag;
-    boolean src1_ready = true, src2_ready = true, dest_ready = true;
+    boolean ready = true;
+    List<Integer> renamedRegisters = new ArrayList<>();
 
     // Store cycle and duration instruction was in each state for final output
     State state;
@@ -371,11 +378,14 @@ class Instruction implements Comparable<Instruction> {
         return Integer.compare(this.tag, other.tag); // Sort by pc, ascending order
     }
 
-    public void wake() {
-        this.dest_ready =
-            (src1 == -1 || Simulator.register[src1] == -1) 
-            && (src2 == -1 || Simulator.register[src2] == -1)
-            && (dest == -1 || Simulator.register[dest] == -1);
+    public void wake(int tag) {
+        if (renamedRegisters.contains(tag)) {
+            renamedRegisters.remove(Integer.valueOf(tag));
+        }
+
+        if (renamedRegisters.isEmpty()) {
+            ready = true;
+        }
     }
 
     /**
