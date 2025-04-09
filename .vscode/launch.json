@@ -6,6 +6,13 @@
     "configurations": [
         {
             "type": "java",
+            "name": "Main",
+            "request": "launch",
+            "mainClass": "Main",
+            "projectName": "CDA5106_3c5fe320"
+        },
+        {
+            "type": "java",
             "name": "Batch",
             "request": "launch",
             "mainClass": "batching.Batch",

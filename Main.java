@@ -29,22 +29,18 @@ enum Reg {
 public class Main {
 
     // Variables chosen by user
-    static int schedulingQueueSize = 1;
-    static int fetchRate = 1;
-    static String filename = "./traces/val_trace_gcc.txt";
+    static int schedulingQueueSize = 128;
+    static int fetchRate = 8;
+    static String filename = "./traces/val_trace_perl.txt";
 
     public static void main(String args[]) {
-        /*
-            Scanner inputScanner = new Scanner(System.in);
-            System.out.println("Enter trace file:");
-            String filename = inputScanner.nextLine();
-            inputScanner.close();
-        */
         
         try {
-            schedulingQueueSize = Integer.parseInt(args[0]);
-            fetchRate = Integer.parseInt(args[1]);
-            filename = args[2];
+            if (args.length != 0) {
+                schedulingQueueSize = Integer.parseInt(args[0]);
+                fetchRate = Integer.parseInt(args[1]);
+                filename = args[2];
+            }
             
         } catch (NumberFormatException e) {
             System.out.println("An error has occured, arguments potentially incorrect. Did you format it as: 'java Main <scheduleQueueSize> <fetchRate> <tracefile>'?");
@@ -71,7 +67,7 @@ public class Main {
                     tagNum
                 );
                 tagNum++;
-                System.out.println(newInstruction.toString());
+                //System.out.println(newInstruction.toString());
                 instructions.add(newInstruction);
             }
 
@@ -91,10 +87,13 @@ public class Main {
             issue();
             dispatch();
             
+            System.out.println("Fetch");
             for (int i = 0; i < fetchRate; i++) {
                 if (iterator.hasNext()) {
-                    fetch(iterator.next());
-                    instructionsProcessed++;
+                    if (dispatchList.size() < fetchRate * 2){
+                        fetch(iterator.next());
+                        instructionsProcessed++;
+                    }
                 }
             }
         }
@@ -121,7 +120,7 @@ public class Main {
 
         text += "number of instructions = " + (tagNum) + "\n";
         text += "number of cycles       = " + (PC) + "\n";
-        text += "IPC                    = " + (float)(PC/tagNum);
+        text += "IPC                    = " + String.format("%.5f", ((float)(tagNum) / (float)(PC))) + "\n";
 
         try {
             Files.writeString(fileName, text);
@@ -182,10 +181,15 @@ public class Main {
         
     private static boolean advanceCycle(int instructionsProcessed) {
         // Advance simulator cycle?
-        PC += 1;
+        boolean output = !(instructionsProcessed >= instructions.size() && fakeROB.size() <= 0);
+
+        if (output)
+            PC += 1;
+
+        //if (PC > 10) return false;
 
         // Check if Instruction List is empty, return false
-        return !(instructionsProcessed >= instructions.size() && fakeROB.size() <= 0);
+        return output;
 
     }
 
@@ -201,7 +205,6 @@ public class Main {
      * 
      */
     private static void fetch(Instruction instruction) {
-        System.out.println("Fetch");
         // Here, we are setting the instruction to IF, not sure what the initializing the data structure is (besides creating it?);
         instruction.setState(State.IF);
         instruction.c_IF = PC;
@@ -232,70 +235,55 @@ public class Main {
         System.out.println("Dispatch");
         System.out.println("  " + dispatchList.size() + " instructions in list");
 
-        Iterator<Instruction> iterator = dispatchList.iterator();
+        List<Instruction> id_list = new ArrayList<>();
 
+        // From the dispatch_list, construct a temp list of instructions in the ID
+        for (int i = 0; i < dispatchList.size(); i++) {
+            if (dispatchList.get(i).state == State.ID)
+                id_list.add(dispatchList.get(i));
+        }
+
+        Collections.sort(id_list);
+        Iterator<Instruction> iterator = id_list.iterator();
 
         while (iterator.hasNext()) {
             Instruction i = iterator.next();
 
-            // Only add instructions with 'ID' tag to new list
-            // @NOTE - I'm assuming the 1 cycle stall is it starts at IF, otherwise start at 'ID'
-            if (i.state == State.ID) {
-                // Instruction doesn't need a register? Simply proceed
-                if (i.src1 == -1 && i.src2 == -1) {
-                    i.isReady = true;
-                }
-                // Instruction is using 1 register, indicated by -1
-                else if (i.src2 == -1 && register[i.src1] == -1) {
-                    i.isReady = true;
-                }
-                else if (i.src1 == -1 && register[i.src2] == -1) {
-                    i.isReady = true;
-                }
-                // Instruction is using two registers and both are not being modified
-                else if (register[i.src1] == -1 && register[i.src2] == -1) {
-                    i.isReady = true;
-                }
+            //if the scheduling queue is not full
+            if (issueList.size() >= schedulingQueueSize)
+                continue;
 
-                // Register renaming before going into reservation tables
-                else if (!i.isRenamed && (register[i.src1] != -1 || register[i.src2] != - 1)) {
-                    i.isRenamed = true;
-                    
-                    // Rename source operands by looking up state in register
-                    // Instruction is not dependant if the register is empty or its source is -1 
+            // Remove from dispatch_list
+            dispatchList.remove(i);
+            issueList.add(i);
 
-                    if (i.src1 != -1 && register[i.src1] != -1) {
-                        i.renamedRegisters.add(register[i.src1]);
-                    }
-                    if (i.src2 != -1 && register[i.src2] != -1) {
-                        i.renamedRegisters.add(register[i.src2]);
-                    }
-                    // Rename Destination by updating state in register
-                    if (i.dest != -1) {
-                        register[i.dest] = i.tag;
-                    }
+            // Transition from ID to IS state
+            i.setState(State.IS);
+            i.c_IS = PC;
+            i.d_ID = PC - i.c_ID;
 
-                    System.out.println("  Instruction " + i.tag + "renamed to: " + i.renamedRegisters);
-                }
-                
-                // If there is room in the reservation table, add it, else stall in this stage
-                if (issueList.size() < schedulingQueueSize) {
-                    System.out.println("  Instruction " + i.tag + " moved to issueList.");
-                    i.setState(State.IS);
-
-                    i.d_ID = PC - i.c_ID;
-                    i.c_IS = PC;
-
-                    iterator.remove();
-                    issueList.add(i); // automatically increments num in scheduling queue
-                }
-                else {
-                    // System.out.println("  Instruction " + i.tag + " not ready, source is being written to or scheduling queue is full");
-                    // Instructions here should either have proceeded to the next stage, or have their renamed register and
-                    // awaiting for a spot in the reservation table. 
-                }
+            // Rename source operands by looking up state in the register file
+            // For each register that isnt -1, add to the renamed list
+            if (i.src1 != -1 && register[i.src1] != -1) {
+                i.renamedRegisters.add(register[i.src1]);
+                i.isReady = false;
             }
-            else {
+
+            if (i.src2 != -1 && register[i.src2] != -1) {
+                i.renamedRegisters.add(register[i.src2]);
+                i.isReady = false;
+            }
+
+            // Rename destination by updating state in the register file
+            if (i.dest != -1)
+                register[i.dest] = i.tag;
+        }
+
+        // If still in dispatch, change from IF to ID state
+        for (int j = 0; j < dispatchList.size(); j++) {
+            Instruction i = dispatchList.get(j);
+
+            if (i.state != State.ID) {
                 i.setState(State.ID);
                 i.d_IF = PC - i.c_IF;
                 i.c_ID = PC;
@@ -385,6 +373,9 @@ public class Main {
                     for (Instruction b_i : issueList) {
                         b_i.attemptWakeUp(i.tag);
                     }
+
+                    if (register[i.dest] == i.tag)
+                        register[i.dest] = -1;
                 }
                     
                 iterator.remove();
@@ -398,11 +389,10 @@ public class Main {
     private static void fakeRetire() {
         System.out.println("FakeRetire");
 
-
         while (true) { 
             if (!fakeROB.isEmpty() && fakeROB.peek().state == State.WB) {
                 Instruction i = fakeROB.remove();
-                i.d_WB = PC - i.c_WB;
+                i.d_WB = 1;
             }
             else {
                 break;
@@ -422,12 +412,12 @@ class Instruction implements Comparable<Instruction> {
     int c_WB = -1, d_WB = -1;
 
     State state;
-    boolean isReady = false;
+    boolean isReady = true;
     boolean isRenamed = false;
     List<Integer> renamedRegisters = new ArrayList<>();
 
     int latency;
-    int exeTimer = 0;
+    int exeTimer = 1;
 
     Instruction(int pc, int op, int dest, int src1, int src2, int tag) {
         this.pc = pc;
@@ -445,13 +435,13 @@ class Instruction implements Comparable<Instruction> {
     public String toString() {
         return tag + " "
             + "fu{" + op + "} "
-            + "src{" + src1 + ", " + src2 + "} "
+            + "src{" + src1 + "," + src2 + "} "
             + "dst{" + dest + "} "
-            + "IF{" + c_IF + ", " + d_IF + "} "
-            + "ID{" + c_ID + ", " + d_ID + "} "
-            + "IS{" + c_IS + ", " + d_IS + "} "
-            + "EX{" + c_EX + ", " + d_EX + "} "
-            + "WB{" + c_WB + ", " + d_WB + "} ";
+            + "IF{" + c_IF + "," + d_IF + "} "
+            + "ID{" + c_ID + "," + d_ID + "} "
+            + "IS{" + c_IS + "," + d_IS + "} "
+            + "EX{" + c_EX + "," + d_EX + "} "
+            + "WB{" + c_WB + "," + d_WB + "}";
     }
 
     public void setState(State state) {
@@ -498,9 +488,10 @@ class Instruction implements Comparable<Instruction> {
 
         if (renamedRegisters.isEmpty()) {
             isReady = true;
+            System.out.println("  Instruction " + tag + " awake");
         }
         else {
-            System.err.println("Fail to wake up, waiting on: " + renamedRegisters);
+            System.err.println("  Fail to wake up, waiting on: " + renamedRegisters);
         }
     }
 }
