@@ -47,19 +47,19 @@ public class Batch {
 
                 if (hasTrue) {
                     Dependency d = new Dependency(i1.tag, i2.tag, Dependency.Type.TRUE);
-                    i1.dependencies.add(d);
+                    i2.dependencies.add(d);
                     dependencies.add(d);
                 }
 
                 if (hasOut) {
                     Dependency d = new Dependency(i1.tag, i2.tag, Dependency.Type.OUT);
-                    i1.dependencies.add(d);
+                    i2.dependencies.add(d);
                     dependencies.add(d);
                 }
 
                 if (hasAnti) {
                     Dependency d = new Dependency(i1.tag, i2.tag, Dependency.Type.ANTI);
-                    i1.dependencies.add(d);
+                    i2.dependencies.add(d);
                     dependencies.add(d);
                 }
                 
