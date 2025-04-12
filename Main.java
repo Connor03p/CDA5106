@@ -31,7 +31,7 @@ public class Main {
     // Variables chosen by user
     static int schedulingQueueSize = 8;
     static int fetchRate = 8;
-    static String filename = "./traces/val_trace_gcc.txt";
+    static String filename = "./traces/val_trace_gcc_reordered.txt";
 
     public static void main(String args[]) {
         
