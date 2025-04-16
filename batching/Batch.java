@@ -15,6 +15,8 @@ public class Batch {
     public static void main(String args[]) {
         String filename = "./traces/val_trace_gcc.txt";
         String outputFile = "./traces/val_trace_gcc_reordered.txt";
+        int fetchRate = 8;
+        int queueSize = 8;
 
         List<Instruction> instructions = readTraceFile(filename, 10000);
         System.out.println("\nRead " + instructions.size() + " instructions from '" + filename + "'");
@@ -48,6 +50,7 @@ public class Batch {
         // Write reordered instructions to a new trace file
         writeTraceFile(reordered, outputFile);
 
+        Main.main(fetchRate, queueSize, reordered);
     }
 
     public static List<Dependency> getDependencies(List<Instruction> instructions) {
@@ -231,33 +234,5 @@ class Dependency {
     @Override
     public String toString() {
         return "(" + tag1 + ", " + tag2 + ": " + type + ")";
-    }
-}
-
-class Instruction implements Comparable<Instruction> {
-    int pc, op, dest, src1, src2, tag;
-    List<Dependency> dependencies = new ArrayList<>();
-
-    Instruction(int pc, int op, int dest, int src1, int src2, int tag) {
-        this.pc = pc;
-        this.op = op;
-        this.dest = dest;
-        this.src1 = src1;
-        this.src2 = src2;
-        this.tag = tag;
-    }
-
-    @Override
-    public String toString() {
-        return tag + " "
-            + "fu{" + op + "} "
-            + "src{" + src1 + ", " + src2 + "} "
-            + "dst{" + dest + "} ";
-    }
-
-
-    @Override // Sort by PC in ascending order
-    public int compareTo(Instruction other) {
-        return Integer.compare(this.dependencies.size(), other.dependencies.size()); 
     }
 }
