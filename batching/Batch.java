@@ -126,7 +126,6 @@ public class Batch {
     }
 
     public static List<List<Instruction>> scheduleBatches(List<Instruction> instructions, int width) {
-        // Build dependency graph using only RAW dependencies
     
         int n = instructions.size();
         int[] inDegree = new int[n]; // Number of dependencies for each instruction 
@@ -137,59 +136,55 @@ public class Batch {
             adjList.add(new ArrayList<>());
         }
     
-        // Fill in-degree array and adjacency list based on TRUE dependencies
+        // All dependency types
         for (Instruction inst : instructions) {
             for (Dependency d : inst.dependencies) {
-                if (d.type == Dependency.Type.TRUE) {
+                if (d.type == Dependency.Type.TRUE || d.type == Dependency.Type.OUT || d.type == Dependency.Type.ANTI) {
                     inDegree[d.tag2]++; // Instruction d.tag2 depends on d.tag1
                     adjList.get(d.tag1).add(d.tag2); // Add an edge from d.tag1 to d.tag2
                 }
             }
         }
     
-        // Step 2: Schedule instructions in batches using a topological sort-like approach
-    
         List<List<Instruction>> batches = new ArrayList<>(); // Each batch = instructions issued in one cycle
-        List<Instruction> ready = new ArrayList<>(); // Instructions ready to issue (in-degree == 0)
+        boolean[] scheduled = new boolean[n];
+        int scheduledCount = 0;
+
+        while(scheduledCount < n) {
+            List<Instruction> batch = new ArrayList<>();
+
+            for (int i = 0; i < n && batch.size() < width; i++) {
+                if (!scheduled[i] && inDegree[i] == 0) {
+                    Instruction inst = instructions.get(i);
+                    batch.add(inst);
+                    scheduled[i] = true;
+                    scheduledCount++;
     
-        // Find instructions with no dependencies
-        for (Instruction inst : instructions) {
-            if (inDegree[inst.tag] == 0) {
-                ready.add(inst);
-            }
-        }
-    
-        // Continue until all instructions are scheduled
-        while (!ready.isEmpty()) {
-            List<Instruction> batch = new ArrayList<>();      // Instructions issued in the current cycle
-            List<Instruction> nextReady = new ArrayList<>();  // Instructions that become ready after this batch
-    
-            // Issue up to 'width' instructions this cycle
-            for (int i = 0; i < Math.min(width, ready.size()); i++) {
-                Instruction inst = ready.get(i);
-                batch.add(inst);
-    
-                // Reduce the in-degree of dependent instructions that follow
-                for (int neighbor : adjList.get(inst.tag)) {
-                    inDegree[neighbor]--;
-                    if (inDegree[neighbor] == 0) {
-                        // If all dependencies are resolved, mark ready for the next cycle
-                        nextReady.add(instructions.get(neighbor));
+                    // Decrement in-degrees of children
+                    for (int neighbor : adjList.get(inst.tag)) {
+                        inDegree[neighbor]--;
                     }
                 }
             }
-    
-            // Remove issued instructions from the ready list
-            ready.removeAll(batch);
-    
-            // Add newly ready instructions to be considered in the next cycle
-            ready.addAll(nextReady);
-    
-            // Store the current batch
-            batches.add(batch);
+             //If nothing was scheduled this cycle, force instruction. (Prevents Deadlocks)
+             if (batch.size() == 0) {
+                for(int i = 0; i < n; i++){
+                    if (!scheduled[i]) {
+                        Instruction inst = instructions.get(i);
+                        batch.add(inst);
+                        scheduled[i] = true;
+                        scheduledCount++;
+
+                        for(int neighbor : adjList.get(inst.tag)){
+                            inDegree[neighbor]--;
+                        }
+                        break; //only issue one to break deadlock
+                    }
+                }
+            }
+            batches.add(batch);   
         }
-    
-        return batches;
+        return batches;        
     }
     
     public static List<Instruction> flattenBatches(List<List<Instruction>> batches){
