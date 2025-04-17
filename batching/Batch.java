@@ -15,10 +15,8 @@ public class Batch {
     public static void main(String args[]) {
         String filename = "./traces/val_trace_gcc.txt";
         String outputFile = "./traces/val_trace_gcc_reordered.txt";
-        int fetchRate = 8;
-        int queueSize = 8;
 
-        List<Instruction> instructions = readTraceFile(filename, 10000);
+        List<InstructionBatch> instructions = readTraceFile(filename, 10000);
         System.out.println("\nRead " + instructions.size() + " instructions from '" + filename + "'");
 
         List<Dependency> dependencies = getDependencies(instructions);
@@ -27,7 +25,7 @@ public class Batch {
 
         Collections.sort(instructions);
 
-        List<List<Instruction>> batches = scheduleBatches(instructions, 4);
+        List<List<InstructionBatch>> batches = scheduleBatches(instructions, 4);
         System.out.println("\nScheduled in " + batches.size() + " clock cycles");
 
         //Lists Dependencies
@@ -39,30 +37,37 @@ public class Batch {
         */
 
         int cycle = 0;
-        for(List<Instruction> batch : batches){
+        for(List<InstructionBatch> batch : batches){
             System.out.println("Cyles " + cycle + ": " + batch);
             cycle++;
         }
         
         // Flatten the batches into a single list (reordered trace)
-        List<Instruction> reordered = flattenBatches(batches);
+        List<InstructionBatch> reordered = flattenBatches(batches);
+
+        // Convert to regular instructions
+        List<Instruction> newTrace = new ArrayList<>();
+        for (int i = 0; i < reordered.size(); i++) {
+            InstructionBatch a = reordered.get(i);
+            newTrace.add(new Instruction(a.pc, a.op, a.dest, a.src1, a.src2, a.tag));
+        }
 
         // Write reordered instructions to a new trace file
         writeTraceFile(reordered, outputFile);
 
-        Main.main(fetchRate, queueSize, reordered);
+        Main.main(newTrace);
     }
 
-    public static List<Dependency> getDependencies(List<Instruction> instructions) {
+    public static List<Dependency> getDependencies(List<InstructionBatch> instructions) {
 
         List<Dependency> dependencies = new ArrayList<>();
         
         for (int i = 0; i < instructions.size(); i++) {
-            Instruction i1 = instructions.get(i);
+            InstructionBatch i1 = instructions.get(i);
 
             // For all instructions after i
             for (int j = i + 1; j < instructions.size(); j++) {
-                Instruction i2 = instructions.get(j);
+                InstructionBatch i2 = instructions.get(j);
                 
                 // Check for true (read after write) and output (write after write) dependencies
                 boolean hasTrue = (i1.dest != -1) && (i1.dest == i2.src1 || i1.dest == i2.src2);
@@ -93,8 +98,8 @@ public class Batch {
         return dependencies;
     }
 
-    public static List<Instruction> readTraceFile(String filename, int maxLen) {
-        List<Instruction> instructions = new ArrayList<>();
+    public static List<InstructionBatch> readTraceFile(String filename, int maxLen) {
+        List<InstructionBatch> instructions = new ArrayList<>();
         File file = new File(filename);
         Scanner fileScanner;
         int tagNum = 0;
@@ -105,7 +110,7 @@ public class Batch {
             while (fileScanner.hasNextLine() && tagNum < maxLen) {
                 String line = fileScanner.nextLine();
                 String[] split = line.split(" ");
-                Instruction newInstruction = new Instruction(
+                InstructionBatch newInstruction = new InstructionBatch(
                     Integer.parseInt(split[0], 16), // Converts hexadecimal to int
                     Integer.parseInt(split[1]), 
                     Integer.parseInt(split[2]), 
@@ -125,7 +130,7 @@ public class Batch {
         }
     }
 
-    public static List<List<Instruction>> scheduleBatches(List<Instruction> instructions, int width) {
+    public static List<List<InstructionBatch>> scheduleBatches(List<InstructionBatch> instructions, int width) {
     
         int n = instructions.size();
         int[] inDegree = new int[n]; // Number of dependencies for each instruction 
@@ -137,7 +142,7 @@ public class Batch {
         }
     
         // All dependency types
-        for (Instruction inst : instructions) {
+        for (InstructionBatch inst : instructions) {
             for (Dependency d : inst.dependencies) {
                 if (d.type == Dependency.Type.TRUE || d.type == Dependency.Type.OUT || d.type == Dependency.Type.ANTI) {
                     inDegree[d.tag2]++; // Instruction d.tag2 depends on d.tag1
@@ -146,16 +151,16 @@ public class Batch {
             }
         }
     
-        List<List<Instruction>> batches = new ArrayList<>(); // Each batch = instructions issued in one cycle
+        List<List<InstructionBatch>> batches = new ArrayList<>(); // Each batch = instructions issued in one cycle
         boolean[] scheduled = new boolean[n];
         int scheduledCount = 0;
 
         while(scheduledCount < n) {
-            List<Instruction> batch = new ArrayList<>();
+            List<InstructionBatch> batch = new ArrayList<>();
 
             for (int i = 0; i < n && batch.size() < width; i++) {
                 if (!scheduled[i] && inDegree[i] == 0) {
-                    Instruction inst = instructions.get(i);
+                    InstructionBatch inst = instructions.get(i);
                     batch.add(inst);
                     scheduled[i] = true;
                     scheduledCount++;
@@ -170,7 +175,7 @@ public class Batch {
              if (batch.size() == 0) {
                 for(int i = 0; i < n; i++){
                     if (!scheduled[i]) {
-                        Instruction inst = instructions.get(i);
+                        InstructionBatch inst = instructions.get(i);
                         batch.add(inst);
                         scheduled[i] = true;
                         scheduledCount++;
@@ -187,18 +192,18 @@ public class Batch {
         return batches;        
     }
     
-    public static List<Instruction> flattenBatches(List<List<Instruction>> batches){
-        List<Instruction> reordered = new ArrayList<>();
-        for (List<Instruction> batch : batches){
+    public static List<InstructionBatch> flattenBatches(List<List<InstructionBatch>> batches){
+        List<InstructionBatch> reordered = new ArrayList<>();
+        for (List<InstructionBatch> batch : batches){
             reordered.addAll(batch);
         }
         return reordered;
     }
 
-    public static void writeTraceFile(List<Instruction> instructions, String outputFilename) {
+    public static void writeTraceFile(List<InstructionBatch> instructions, String outputFilename) {
     try {
         StringBuilder sb = new StringBuilder();
-        for (Instruction inst : instructions) {
+        for (InstructionBatch inst : instructions) {
             sb.append(String.format("%08x %d %d %d %d\n", 
                 inst.pc, inst.op, inst.dest, inst.src1, inst.src2));
         }
@@ -229,5 +234,33 @@ class Dependency {
     @Override
     public String toString() {
         return "(" + tag1 + ", " + tag2 + ": " + type + ")";
+    }
+}
+
+class InstructionBatch implements Comparable<InstructionBatch> {
+    int pc, op, dest, src1, src2, tag;
+    List<Dependency> dependencies = new ArrayList<>();
+
+    InstructionBatch(int pc, int op, int dest, int src1, int src2, int tag) {
+        this.pc = pc;
+        this.op = op;
+        this.dest = dest;
+        this.src1 = src1;
+        this.src2 = src2;
+        this.tag = tag;
+    }
+
+    @Override
+    public String toString() {
+        return tag + " "
+            + "fu{" + op + "} "
+            + "src{" + src1 + ", " + src2 + "} "
+            + "dst{" + dest + "} ";
+    }
+
+
+    @Override // Sort by PC in ascending order
+    public int compareTo(InstructionBatch other) {
+        return Integer.compare(this.dependencies.size(), other.dependencies.size()); 
     }
 }

@@ -32,10 +32,7 @@ public class Main {
     static int fetchRate = 8;
     static String filename = "./traces/val_trace_gcc_BatchReordered.txt";
 
-    public static void main(int N, int S, List<Instruction> reordered) {
-
-        schedulingQueueSize = S;
-        fetchRate = N;        
+    public static void main(List<Instruction> reordered) {
         instructions = reordered;
         int tagNum = instructions.size();
 
@@ -75,6 +72,8 @@ public class Main {
         name = name.substring(0, name.lastIndexOf('.'));
 
         Path fileName = Path.of("./pipe_" + schedulingQueueSize + "_" + fetchRate + "_" + name + ".txt");
+
+        Collections.sort(instructions);
 
         for (Instruction i : instructions) {
             text += i + "\n";
@@ -379,7 +378,6 @@ class Instruction implements Comparable<Instruction> {
     boolean isReady = true;
     boolean isRenamed = false;
     List<Integer> renamedRegisters = new ArrayList<>();
-    List<Dependency> dependencies = new ArrayList<>();
 
     int latency;
     int exeTimer = 1;
