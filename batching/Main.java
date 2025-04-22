@@ -30,9 +30,13 @@ public class Main {
     // Variables chosen by user
     static int schedulingQueueSize = 8;
     static int fetchRate = 8;
-    static String filename = "./traces/val_trace_gcc_BatchReordered.txt";
+    static String filename = "./traces/val_trace_gcc";
 
-    public static void main(List<Instruction> reordered) {
+    public static void main(List<Instruction> reordered, int N, int S, String F) {
+        fetchRate = N;
+        schedulingQueueSize = S;
+        filename = F;
+        
         instructions = reordered;
         int tagNum = instructions.size();
 

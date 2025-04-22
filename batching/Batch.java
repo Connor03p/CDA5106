@@ -13,7 +13,17 @@ import java.util.Scanner;
 public class Batch {
 
     public static void main(String args[]) {
+        
         String filename = "./traces/val_trace_gcc.txt";
+        int fetchRate = 8;
+        int scheudlingQueueSize = 8;
+
+        if (args.length > 0) {
+            scheudlingQueueSize = Integer.parseInt(args[0]);
+            fetchRate = Integer.parseInt(args[1]);
+            filename = args[2];
+        }
+        
         String outputFile = "./traces/val_trace_gcc_reordered.txt";
 
         List<InstructionBatch> instructions = readTraceFile(filename, 10000);
@@ -55,7 +65,7 @@ public class Batch {
         // Write reordered instructions to a new trace file
         writeTraceFile(reordered, outputFile);
 
-        Main.main(newTrace);
+        Main.main(newTrace, fetchRate, scheudlingQueueSize, filename);
     }
 
     public static List<Dependency> getDependencies(List<InstructionBatch> instructions) {
