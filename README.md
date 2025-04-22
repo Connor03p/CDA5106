@@ -1,13 +1,13 @@
 # CDA5106
 
-### Running Machine Problem:
+# Machine Problem:
 ## To Compile:
 `javac Main.java`
 
 ## To Run:
 `java Main <scheduling queue size> <fetch size> <path to trace file>`
 
-### Running Optimization:
+# Batching Optimization:
 ## To Compile:
 `javac ./batching/*.java`
 
