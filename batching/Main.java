@@ -1,5 +1,5 @@
-import java.io.File;
-import java.io.FileNotFoundException;
+package batching;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -10,7 +10,6 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
-import java.util.Scanner;
 
 enum State {
     IF,
@@ -31,51 +30,15 @@ public class Main {
     // Variables chosen by user
     static int schedulingQueueSize = 8;
     static int fetchRate = 8;
-    static String filename = "./traces/val_trace_gcc_reordered.txt";
+    static String filename = "./traces/val_trace_gcc";
 
-    public static void main(String args[]) {
+    public static void main(List<Instruction> reordered, int N, int S, String F) {
+        fetchRate = N;
+        schedulingQueueSize = S;
+        filename = F;
         
-        try {
-            if (args.length != 0) {
-                schedulingQueueSize = Integer.parseInt(args[0]);
-                fetchRate = Integer.parseInt(args[1]);
-                filename = args[2];
-            }
-            
-        } catch (NumberFormatException e) {
-            System.out.println("An error has occured, arguments potentially incorrect. Did you format it as: 'java Main <scheduleQueueSize> <fetchRate> <tracefile>'?");
-            return;
-        }
-
-
-        File file = new File(filename);
-        Scanner fileScanner;
-        int tagNum = 0;
-        
-        try {
-            fileScanner = new Scanner(file);
-
-            while (fileScanner.hasNextLine()) {
-                String line = fileScanner.nextLine();
-                String[] split = line.split(" ");
-                Instruction newInstruction = new Instruction(
-                    Integer.parseInt(split[0], 16), // Converts hexadecimal to int
-                    Integer.parseInt(split[1]), 
-                    Integer.parseInt(split[2]), 
-                    Integer.parseInt(split[3]), 
-                    Integer.parseInt(split[4]),
-                    tagNum
-                );
-                tagNum++;
-                //System.out.println(newInstruction.toString());
-                instructions.add(newInstruction);
-            }
-
-            fileScanner.close();
-        } catch (FileNotFoundException e) {
-            System.out.println("Error reading file.");
-            return;
-        }        
+        instructions = reordered;
+        int tagNum = instructions.size();
 
         // Main Simulator Loop
         Iterator<Instruction> iterator = instructions.iterator();
@@ -113,6 +76,8 @@ public class Main {
         name = name.substring(0, name.lastIndexOf('.'));
 
         Path fileName = Path.of("./pipe_" + schedulingQueueSize + "_" + fetchRate + "_" + name + ".txt");
+
+        Collections.sort(instructions);
 
         for (Instruction i : instructions) {
             text += i + "\n";
