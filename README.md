@@ -1,17 +1,17 @@
 # CDA5106
 
-# Machine Problem:
-## To Compile:
+## Machine Problem:
+### To Compile:
 `javac Main.java`
 
-## To Run:
+### To Run:
 `java Main <scheduling queue size> <fetch size> <path to trace file>`
 
-# Batching Optimization:
-## To Compile:
+## Batching Optimization:
+### To Compile:
 `javac ./batching/*.java`
 
-## To Run:
+### To Run:
 `java batching.Batch <scheduling queue size> <fetch size> <path to trace file>`
 
 ## What happens?
